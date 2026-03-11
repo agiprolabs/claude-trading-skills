@@ -13,7 +13,10 @@
       "author": {
         "name": "AGIPro"
       },
-      "source": ".",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/agiprolabs/claude-trading-skills.git"
+      },
       "category": "finance",
       "homepage": "https://github.com/agiprolabs/claude-trading-skills"
     }
