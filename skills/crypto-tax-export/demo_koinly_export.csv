@@ -1,0 +1,9 @@
+Date,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Net Worth Amount,Net Worth Currency,Label,Description,TxHash
+2025-01-15 10:00:00,500,USDC,3.33,SOL,0.000005,SOL,500.0,USD,swap,Buy SOL with USDC via Jupiter,4xKm9rTPqGn2b7VfZ8jHdR1nQwEsXpYcLmA3kF5vG6t
+2025-02-14 10:00:00,1,SOL,1500000,BONK,0.000005,SOL,165.0,USD,swap,Swap SOL for BONK (multi-hop via USDC),5yLn0sUPrHo3c8WgA9kIeS2oRxFtYqDmB4nC6lG7wH8u
+2025-03-01 10:00:00,,,0.05,SOL,,SOL,8.25,USD,staking,Staking reward from Marinade mSOL,6zMo1tVQsIp4d9XhB0lJfT3pSyGuZrEnC5oD7mH8xI9v
+2025-03-16 10:00:00,,,1000,JUP,,SOL,850.0,USD,airdrop,JUP airdrop Season 2,7aNp2uWRtJq5e0YiC1mKgU4qTzHvAsF0D6pE8nI9yJ0w
+2025-04-15 10:00:00,1,SOL,1,SOL-USDC-LP,0.000005,SOL,175.0,USD,liquidity_in,Add liquidity to SOL-USDC pool,8bOq3vXStKr6f1ZjD2nLhV5rUaIwBtG1E7qF9oJ0zK1x
+2025-08-13 10:00:00,1,SOL-USDC-LP,1.05,SOL,0.000005,SOL,199.5,USD,liquidity_out,Remove liquidity from SOL-USDC pool,9cPr4wYTuLs7g2AkE3oMiW6sVbJxCuH2F8rG0pK1aL2y
+2025-07-14 10:00:00,1500000,BONK,200,USDC,0.000005,SOL,200.0,USD,swap,Sell BONK for USDC via Jupiter,0dQs5xZUvMt8h3BlF4pNjX7tWcKyDvI3G9sH1qL2bM3z
+2026-04-20 10:00:00,1000,JUP,5.5,SOL,0.000005,SOL,1100.0,USD,swap,Sell JUP for SOL (long-term holding),1eRt6yAVwNu9i4CmG5qOkY8uXdLzEwJ4H0tI2rM3cN4a

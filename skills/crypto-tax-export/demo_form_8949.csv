@@ -1,0 +1,17 @@
+--- Part I: Short-Term Capital Gains and Losses ---
+(a) Description of Property,(b) Date Acquired,(c) Date Sold,(d) Proceeds,(e) Cost Basis,(f) Code,(g) Adjustment,(h) Gain or Loss,Holding Period,Check Box
+500 USDC,01/15/2025,01/15/2025,500.00,500.00,,0.00,0.00,0 days,(B)
+1 SOL,01/15/2025,02/14/2025,165.00,150.15,,0.00,14.85,30 days,(B)
+1500000 BONK,02/14/2025,07/14/2025,200.00,165.00,,0.00,35.00,150 days,(B)
+
+--- Part II: Long-Term Capital Gains and Losses ---
+(a) Description of Property,(b) Date Acquired,(c) Date Sold,(d) Proceeds,(e) Cost Basis,(f) Code,(g) Adjustment,(h) Gain or Loss,Holding Period,Check Box
+1000 JUP,03/16/2025,04/20/2026,1100.00,850.00,,0.00,250.00,400 days,(B)
+
+Summary
+Short-term transactions: 3
+Short-term net gain/loss: $49.85
+Long-term transactions: 1
+Long-term net gain/loss: $250.00
+Total net gain/loss: $299.85
+Cost basis method: FIFO
