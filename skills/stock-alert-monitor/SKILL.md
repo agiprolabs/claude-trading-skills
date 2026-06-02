@@ -107,6 +107,56 @@ run it where those hosts are reachable, or swap `--feeds` for a source you can h
 }
 ```
 
+## Staged Buy / Hold / Sell Lifecycle (`momentum_lifecycle.py`)
+
+The news screen above answers *"is this name worth watching?"*. The lifecycle
+state machine answers *"what stage is it in, and what do I do?"* — turning a
+stream of **intraday bars** into staged alerts that follow one name from
+discovery to exit. Each alert maps to a buy / hold / sell action:
+
+| Tier | Stage | Signal | Trigger (any/all as noted) | Message |
+|------|-------|--------|----------------------------|---------|
+| **1** | Watchlist | WATCH | premarket-high break · RVOL > 3 · news catalyst · volume surge | "Stock added to active momentum watchlist." |
+| **2** | Entry Setup | **BUY** | opening-range (15m) breakout · vol > 2× prev candle · above VWAP · spread OK | "Primary momentum setup detected." |
+| **3** | Optimal Entry | **BUY** | pullback to VWAP/9 EMA · trend intact · volume still elevated | "Optimal pullback entry detected." |
+| **4** | Acceleration | HOLD | new intraday highs · RVOL increasing · consecutive volume expansion / halts | "Momentum accelerating." |
+| **5** | Weakness | REDUCE | loss of VWAP · failed breakout · volume drying up · multiple failed highs | "Momentum weakening." |
+| **6** | Failure | **SELL** | break below stop ref · sustained close below VWAP · key support breakdown | "Momentum setup invalidated." |
+
+```
+WATCHLIST → ENTRY SETUP → OPTIMAL ENTRY → ACCELERATION → WEAKNESS → FAILURE
+```
+
+It's a **state machine, not a strict pipeline**: names can skip stages
+(setup → failure) or recover (weakness → acceleration). Transitions are checked
+**risk-first** (Failure, then Weakness, then upgrades) so a breakdown is never
+masked by a stale buy. It alerts **once per transition** (not per bar), pins a
+`stop_ref` on entry so Tier 6 is objective, and **drops a name on failure** so it
+can re-enter cleanly at Tier 1.
+
+**Feed-agnostic** — you push `Bar`s (from Polygon/Alpaca/Tradier/IEX/…) plus a
+light `Context`; it owns VWAP / 9-EMA / opening range / RVOL. All thresholds live
+in `Config`.
+
+```python
+from momentum_lifecycle import MomentumTracker, Bar, Context
+trk = MomentumTracker()
+alert = trk.on_bar("ABCD", Bar(ts, o, h, l, c, vol, minutes_since_open,
+                               bid=b, ask=a), Context(avg_vol_30d, prev_close,
+                               premarket_high=pmh, news_catalyst=True, halt_count=n))
+if alert:
+    print(alert.signal, alert.tier, alert.text())   # e.g. BUY Tier.OPTIMAL_ENTRY ...
+```
+
+Run `python skills/stock-alert-monitor/momentum_lifecycle.py` for a synthetic
+walk-through that emits all six tiers in order. **Tiers 2–6 require a real-time
+intraday bar feed** (VWAP/EMA/ORB/spread/halts) — a different data tier than the
+daily-quote news screen, and not reachable from restricted sandboxes. The news
+screen feeds Tier 1; wire the lifecycle to your broker/market-data stream for 2–6.
+
+> Not financial advice or an execution feed — a discovery/workflow tool. Pair with
+> the `risk-management` and `position-sizing` skills before acting.
+
 ## Caveats
 
 - Headline keyword matching is intentionally broad; verify each alert before trading.
