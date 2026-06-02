@@ -1,17 +1,37 @@
 ---
 name: stock-alert-monitor
-description: Persistent US small/micro-cap catalyst monitor that polls news feeds on an interval and pings on new matches — mergers/acquisitions, earnings & profit beats, and positive PR (FDA decisions, contract wins), with optional share-price and volume filters
+description: Persistent NASDAQ micro-cap catalyst-momentum monitor that polls news feeds on an interval and pings on new matches — mergers/acquisitions, earnings & profit beats, and positive PR (FDA, contract, patent, partnership) — gated by a quantitative screen (price, float, average & relative volume, daily % change)
 ---
 
 # Stock Alert Monitor
 
 Watch US equities for actionable catalysts on small- and micro-cap names and get
-pinged the moment a new headline matches. Built for traders who care about three
-event types on lower-priced stocks (e.g. under $20):
+pinged the moment a new headline matches a **catalyst keyword AND a quantitative
+momentum screen**. Built for traders who care about three event types on
+low-priced NASDAQ names:
 
 - **Mergers / acquisitions** — buyouts, definitive agreements, tender offers, go-shops
 - **Profit reports** — earnings beats, record revenue/net income, raised guidance
-- **Positive PR** — FDA approvals/filings, clinical readouts, contract & partnership wins
+- **Positive PR** — FDA approvals/filings, clinical readouts, contract/patent/partnership wins
+
+### Default momentum screen
+
+A candidate must clear *all* of these (each tunable via flags; `0` disables):
+
+| Criterion | Default | Flag |
+|-----------|---------|------|
+| Listing | NASDAQ only | `--nasdaq-only` / `--any-exchange` |
+| Price | $0.10 – $10 | `--min-price` / `--max-price` |
+| Float | ≤ 20,000,000 shares | `--max-float` |
+| Avg daily vol (30-day) | > 500,000 | `--min-avg-vol` |
+| Relative volume (today / 30-day) | > 2× | `--min-rel-vol` |
+| Daily % change vs prev close | > +10% | `--min-change-pct` |
+| Catalyst keywords | FDA · approval · contract · earnings · patent · partnership · acquisition · merge(r) | (built-in groups) |
+
+The float / relative-volume / % change gates need the **live quote feed**. In
+`--strict` mode (default) a candidate whose metrics can't be confirmed is
+dropped; pass `--no-strict` to fall back to keyword + best-effort-price matching
+when the quote feed is partially blocked.
 
 ## When to Use This Skill
 
@@ -22,22 +42,24 @@ event types on lower-priced stocks (e.g. under $20):
 ## How It Works
 
 `monitor.py` (stdlib only, no deps) polls one or more RSS/Atom feeds, keyword-matches
-each headline against the catalyst groups, extracts the ticker, optionally pulls a
-live price/volume quote, filters by max price, de-duplicates against a seen-state
-file, and emits **one JSON line per new match** on stdout.
+each headline against the catalyst groups, extracts the ticker, pulls a live
+quote (price, volume, 30-day avg volume, relative volume, daily % change, float),
+applies the momentum screen above, de-duplicates against a seen-state file, and
+emits **one JSON line per new match** on stdout.
 
 ```
-python skills/stock-alert-monitor/monitor.py --interval 120 --max-price 20
+python skills/stock-alert-monitor/monitor.py --interval 120      # full default screen
+python skills/stock-alert-monitor/monitor.py --no-strict          # quotes blocked: keyword/price only
 ```
 
-Key flags:
+Key flags (screen flags are in the table above):
 
 | Flag | Default | Purpose |
 |------|---------|---------|
 | `--feeds URL ...` | M&A + biotech feeds | News sources to poll (use ones reachable from your network) |
 | `--interval N` | `300` | Seconds between polls |
-| `--max-price P` | `20` | Only alert on tickers at/under this price (`0` disables) |
-| `--quotes/--no-quotes` | on | Fetch live price + volume per ticker |
+| `--strict/--no-strict` | strict | Drop (or allow) candidates whose screen metrics can't be confirmed |
+| `--quotes/--no-quotes` | on | Fetch live price/volume/float per ticker |
 | `--webhook URL` | `$ALERT_WEBHOOK` | POST each match to Slack/Discord-style webhook |
 | `--once` | off | Single pass then exit (for cron or `/loop`) |
 | `--state PATH` | `~/.cache/stock-alert-monitor/seen.txt` | De-dup memory |
@@ -47,7 +69,7 @@ Key flags:
 **Inside Claude Code (recommended):** wrap it with the `Monitor` tool so every new
 match becomes a chat/phone notification:
 
-> Monitor: `python skills/stock-alert-monitor/monitor.py --interval 120 --max-price 20`
+> Monitor: `python skills/stock-alert-monitor/monitor.py --interval 120`
 > (set `persistent: true`)
 
 Each stdout JSON line fires one notification. The script keeps running across the
@@ -72,12 +94,16 @@ run it where those hosts are reachable, or swap `--feeds` for a source you can h
 ```json
 {
   "ts": "2026-06-02T14:03:11Z",
-  "ticker": "TNXP",
+  "ticker": "ABCD",
   "catalysts": ["positive_pr"],
-  "title": "Tonix Pharmaceuticals Awarded $34M DoD Contract for TNX-4200",
+  "title": "Acme Bio Awarded $34M DoD Contract for ABC-4200",
   "link": "https://...",
-  "quote": {"price": 13.18, "volume": 241680, "currency": "USD"},
-  "text": "📈 TNXP [positive_pr] $13.18 vol 241,680 :: Tonix ... $34M DoD Contract"
+  "quote": {
+    "price": 4.18, "volume": 6240000, "avg_vol_30d": 850000,
+    "rel_vol": 7.3, "change_pct": 28.4, "float": 11800000,
+    "exchange": "NasdaqCM", "currency": "USD"
+  },
+  "text": "🚀 ABCD [positive_pr] $4.18 +28.4% relvol 7.3x vol 6,240,000 float 11.8M :: Acme Bio Awarded $34M DoD Contract"
 }
 ```
 
