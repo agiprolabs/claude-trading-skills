@@ -6,7 +6,7 @@ name: stock-alert-monitor
 #
 # Setup (one time):
 #   Settings -> Secrets and variables -> Actions -> New repository secret
-#     Name:  SLACK_WEBHOOK
+#     Name:  ALERT_WEBHOOK
 #     Value: https://hooks.slack.com/services/XXX/YYY/ZZZ
 #
 # Trigger it by schedule (below) or manually via "Run workflow".
@@ -51,11 +51,11 @@ jobs:
 
       - name: Scan + alert
         env:
-          ALERT_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
           STRICT_FLAG: ${{ (inputs.strict && '--strict') || '--no-strict' }}
         run: |
           if [ -z "$ALERT_WEBHOOK" ]; then
-            echo "::error::SLACK_WEBHOOK secret is not set — add it under Settings > Secrets > Actions"
+            echo "::error::ALERT_WEBHOOK secret is not set — add it under Settings > Secrets > Actions"
             exit 1
           fi
           mkdir -p .cache
