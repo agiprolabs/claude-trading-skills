@@ -78,23 +78,27 @@ CATALYSTS = {
 }
 
 DEFAULT_FEEDS = [
-    # Replace/extend with feeds reachable from your environment.
+    # Prefer feeds whose headlines embed the exchange + ticker, e.g. "(Nasdaq: XYZ)",
+    # so a quote can be fetched and the screen + sizing can actually run. Replace/
+    # extend with sources reachable from your environment.
+    "https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire%20-%20Public%20Companies",
     "https://www.globenewswire.com/RssFeed/subjectcode/22-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions",
     "https://www.globenewswire.com/RssFeed/industry/4577-Biotechnology/feedTitle/GlobeNewswire%20-%20Biotechnology",
 ]
 
 UA = "Mozilla/5.0 (stock-alert-monitor; +https://github.com/agiprolabs/claude-trading-skills)"
 
-# crude ticker extraction: (NASDAQ: ABCD) / (NYSE: AB) / $ABCD
-TICKER_RE = re.compile(r"\((?:NASDAQ|NYSE|NYSE American|AMEX|OTC)[:\s]+([A-Z]{1,5})\)|\$([A-Z]{1,5})\b")
+# ticker extraction: (Nasdaq: ABCD) / (NYSE: AB) / $ABCD  (case-insensitive)
+TICKER_RE = re.compile(r"\((?:NASDAQ|NYSE|NYSE American|AMEX|OTC)[:\s]+([A-Za-z]{1,5})\)|\$([A-Za-z]{1,5})\b", re.IGNORECASE)
 # capture the exchange too, so we can keep NASDAQ-only when --nasdaq-only is set
-EXCHANGE_RE = re.compile(r"\((NASDAQ|NYSE|NYSE American|AMEX|OTC)[:\s]+([A-Z]{1,5})\)")
+EXCHANGE_RE = re.compile(r"\((NASDAQ|NYSE|NYSE American|AMEX|OTC)[:\s]+([A-Za-z]{1,5})\)", re.IGNORECASE)
 ITEM_RE = re.compile(r"<(?:item|entry)\b.*?</(?:item|entry)>", re.IGNORECASE | re.DOTALL)
 TAG_RE = re.compile(r"<[^>]+>")
 
-# Yahoo v7 quote fields that back the numeric screen.
+# Yahoo v7 quote fields that back the numeric screen + trade-signal levels.
 QUOTE_FIELDS = (
     "regularMarketPrice,regularMarketVolume,regularMarketChangePercent,"
+    "regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose,bid,ask,"
     "averageDailyVolume3Month,averageDailyVolume10Day,floatShares,"
     "sharesOutstanding,fullExchangeName,currency"
 )
@@ -134,7 +138,7 @@ def extract_ticker(text: str) -> str | None:
     m = TICKER_RE.search(text)
     if not m:
         return None
-    return m.group(1) or m.group(2)
+    return (m.group(1) or m.group(2)).upper()
 
 
 def extract_exchange(text: str) -> str | None:
@@ -166,6 +170,11 @@ def fetch_quote(ticker: str, timeout: int = 12) -> dict | None:
             "rel_vol": (vol / avg) if (vol and avg) else None,
             "change_pct": q.get("regularMarketChangePercent"),
             "float": flt,
+            "ask": q.get("ask"),
+            "bid": q.get("bid"),
+            "day_low": q.get("regularMarketDayLow"),
+            "day_high": q.get("regularMarketDayHigh"),
+            "prev_close": q.get("regularMarketPreviousClose"),
             "exchange": q.get("fullExchangeName"),
             "currency": q.get("currency"),
         }
@@ -185,6 +194,11 @@ def fetch_quote(ticker: str, timeout: int = 12) -> dict | None:
             "rel_vol": None,
             "change_pct": ((price - prev) / prev * 100) if (price and prev) else None,
             "float": None,
+            "ask": None,
+            "bid": None,
+            "day_low": meta.get("regularMarketDayLow"),
+            "day_high": meta.get("regularMarketDayHigh"),
+            "prev_close": prev,
             "exchange": meta.get("fullExchangeName"),
             "currency": meta.get("currency"),
         }
@@ -226,6 +240,81 @@ def passes_screen(q: dict | None, args) -> bool:
     return True
 
 
+def _human(n) -> str:
+    """Compact volume formatting: 6_240_000 -> '6.2M'."""
+    if not n:
+        return "?"
+    for unit, div in (("B", 1e9), ("M", 1e6), ("K", 1e3)):
+        if n >= div:
+            return f"{n / div:.1f}{unit}"
+    return str(int(n))
+
+
+def _p(v) -> str:
+    return f"{v:.2f}" if isinstance(v, (int, float)) else "?"
+
+
+def trade_levels(q: dict, args) -> dict:
+    """Derive entry / stop / target / size + pullback & watch levels from a quote.
+
+    Stop uses the session low when it sits below entry (a real support reference);
+    otherwise a percent stop. Target is an R-multiple of entry-to-stop risk. Note:
+    a true *15-minute-low* stop requires intraday bars — see momentum_lifecycle.py;
+    here we use the session low as the closest quote-level proxy.
+    """
+    price = q.get("price")
+    ask = q.get("ask") or price
+    entry = ask or price
+    chg = q.get("change_pct")
+    day_low = q.get("day_low")
+    if day_low and entry and day_low < entry:
+        stop, stop_label = round(day_low, 2), "session low"
+    else:
+        stop = round(entry * (1 - args.stop_pct / 100), 2) if entry else None
+        stop_label = f"{args.stop_pct:g}% stop"
+    risk = (entry - stop) if (entry and stop and entry > stop) else None
+    target = round(entry + args.target_r * risk, 2) if (entry and risk) else None
+    pullback = round(entry * (1 - args.pullback_pct / 100), 2) if entry else None
+    watch = round(entry * (1 - args.watch_pct / 100), 2) if entry else None
+    size = int(args.equity * args.alloc_pct / 100 / entry) if (args.equity and entry) else None
+    return {
+        "entry": entry, "ask": ask, "stop": stop, "stop_label": stop_label,
+        "risk": risk, "target": target, "pullback": pullback, "watch": watch,
+        "size": size, "extended": (chg is not None and chg >= args.extended_pct),
+    }
+
+
+def format_trade_signal(ticker: str, q: dict, args, title: str = "", link: str = "") -> dict:
+    """Render a quote into the staged TRADE SIGNAL message + structured levels."""
+    L = trade_levels(q, args)
+    chg = q.get("change_pct")
+    chg_s = f"{chg:+.1f}%" if chg is not None else "?"
+    float_s = f"{q['float'] / 1e6:.1f}M" if q.get("float") else "?"
+    rvol_s = f"{q['rel_vol']:.1f}x" if q.get("rel_vol") else "?"
+    emoji = "🟡" if L["extended"] else "🟢"
+
+    lines = [f"{emoji} TRADE SIGNAL: ${ticker}  ({chg_s})", ""]
+    if L["extended"]:
+        lines.append(f"Action: WAIT — extended {chg_s}; take position on pullback to ${_p(L['pullback'])}")
+        lines.append(f"  • Chase entry (higher risk) at ask ${_p(L['ask'])}")
+        lines.append(f"  • Or don't buy, just watch below ${_p(L['watch'])}")
+    else:
+        lines.append(f"Action: BUY Limit at ${_p(L['entry'])} (Current Ask: ${_p(L['ask'])})")
+        lines.append(f"  • Or wait for pullback — take position at ${_p(L['pullback'])}")
+        lines.append(f"  • Or don't buy, just watch at ${_p(L['watch'])}")
+    lines += ["", f"Float: {float_s} | RVOL: {rvol_s}", f"Volume: {_human(q.get('volume'))}"]
+    if L["size"]:
+        lines.append(f"Calculated Size: {L['size']:,} shares ({args.alloc_pct:g}% of ${args.equity:,.0f} equity)")
+    else:
+        lines.append("Calculated Size: set --equity to enable position sizing")
+    lines.append(f"Stop Loss (Hard): ${_p(L['stop'])} ({L['stop_label']})")
+    if L["target"]:
+        lines.append(f"Target (Sell 50%): ${_p(L['target'])}  ({args.target_r:g}R)")
+    if title:
+        lines.append(f"\n📰 {title}" + (f"\n{link}" if link else ""))
+    return {"text": "\n".join(lines), "levels": L}
+
+
 def notify_webhook(url: str, payload: dict) -> None:
     body = json.dumps({"text": payload["text"]}).encode()
     req = urllib.request.Request(
@@ -255,18 +344,28 @@ def run_pass(args, seen: set, webhook: str | None) -> int:
                 seen.add(key)
                 continue
             ticker = extract_ticker(text)
+            # require a resolved ticker — a headline with no ticker can't be quoted,
+            # screened, or sized, so it isn't an actionable trade signal.
+            if not ticker:
+                seen.add(key)
+                continue
             # cheap NASDAQ-only prefilter when the headline names the exchange
             if args.nasdaq_only:
                 exch = extract_exchange(text)
                 if exch and exch != "NASDAQ":
                     seen.add(key)
                     continue
-            quote = fetch_quote(ticker) if (ticker and args.quotes) else None
+            # require a confirmed quote with a price — otherwise the screen can't run
+            quote = fetch_quote(ticker) if args.quotes else None
+            if not quote or quote.get("price") is None:
+                seen.add(key)
+                continue
             if not passes_screen(quote, args):
                 seen.add(key)
                 continue
             seen.add(key)
             new_count += 1
+            sig = format_trade_signal(ticker, quote, args, item["title"], item["link"])
             match = {
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "ticker": ticker,
@@ -274,17 +373,9 @@ def run_pass(args, seen: set, webhook: str | None) -> int:
                 "title": item["title"],
                 "link": item["link"],
                 "quote": quote,
+                "levels": sig["levels"],
+                "text": sig["text"],
             }
-            q = quote or {}
-            price_s = f"${q['price']:.2f}" if q.get("price") is not None else "?"
-            chg_s = f"{q['change_pct']:+.1f}%" if q.get("change_pct") is not None else "?"
-            rv_s = f"{q['rel_vol']:.1f}x" if q.get("rel_vol") else "?"
-            vol_s = f"{q['volume']:,}" if q.get("volume") else "?"
-            flt_s = f"{q['float'] / 1e6:.1f}M" if q.get("float") else "?"
-            match["text"] = (
-                f"🚀 {ticker or '?'} [{','.join(cats)}] {price_s} {chg_s} "
-                f"relvol {rv_s} vol {vol_s} float {flt_s} :: {item['title']}"
-            )
             print(json.dumps(match), flush=True)
             if webhook:
                 notify_webhook(webhook, match)
@@ -328,6 +419,21 @@ def main() -> int:
                    help="drop candidates whose screen metrics can't be confirmed")
     p.add_argument("--no-strict", dest="strict", action="store_false",
                    help="allow unconfirmed metrics (keyword/price mode)")
+    # --- trade-signal sizing & levels ---
+    p.add_argument("--equity", type=float, default=25000,
+                   help="account equity for position sizing (0 = disable size)")
+    p.add_argument("--alloc-pct", type=float, default=10,
+                   help="percent of equity to allocate per position")
+    p.add_argument("--stop-pct", type=float, default=8,
+                   help="fallback hard-stop %% below entry when no session low")
+    p.add_argument("--pullback-pct", type=float, default=10,
+                   help="'wait for pullback' entry level, %% below current")
+    p.add_argument("--watch-pct", type=float, default=25,
+                   help="'just watch' level, %% below current")
+    p.add_argument("--target-r", type=float, default=2.0,
+                   help="first target (sell 50%%) as an R multiple of entry-to-stop risk")
+    p.add_argument("--extended-pct", type=float, default=20,
+                   help="if daily %% change exceeds this, recommend waiting not chasing")
     # --- plumbing ---
     p.add_argument("--quotes", action="store_true", default=True,
                    help="fetch price/volume/float (needs quote API egress)")

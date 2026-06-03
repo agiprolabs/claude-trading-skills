@@ -43,9 +43,13 @@ when the quote feed is partially blocked.
 
 `monitor.py` (stdlib only, no deps) polls one or more RSS/Atom feeds, keyword-matches
 each headline against the catalyst groups, extracts the ticker, pulls a live
-quote (price, volume, 30-day avg volume, relative volume, daily % change, float),
-applies the momentum screen above, de-duplicates against a seen-state file, and
-emits **one JSON line per new match** on stdout.
+quote (price, ask, volume, 30-day avg volume, relative volume, daily % change, float,
+session low), applies the momentum screen above, de-duplicates against a seen-state
+file, and emits **one staged TRADE SIGNAL per new match** on stdout.
+
+A headline must resolve to a **ticker with a confirmed quote** to alert — tickerless
+press releases (which can't be screened or sized) are dropped. This is the precision
+guard that keeps the feed actionable.
 
 ```
 python skills/stock-alert-monitor/monitor.py --interval 120      # full default screen
@@ -63,6 +67,13 @@ Key flags (screen flags are in the table above):
 | `--webhook URL` | `$ALERT_WEBHOOK` | POST each match to Slack/Discord-style webhook |
 | `--once` | off | Single pass then exit (for cron or `/loop`) |
 | `--state PATH` | `~/.cache/stock-alert-monitor/seen.txt` | De-dup memory |
+| `--equity N` | `25000` | Account equity for position sizing (`0` disables) |
+| `--alloc-pct P` | `10` | % of equity to allocate per position |
+| `--stop-pct P` | `8` | Fallback hard-stop % below entry when no session low |
+| `--pullback-pct P` | `10` | "Wait for pullback" entry level, % below current |
+| `--watch-pct P` | `25` | "Just watch" level, % below current |
+| `--target-r R` | `2.0` | First target (sell 50%) as an R multiple of risk |
+| `--extended-pct P` | `20` | If daily %change exceeds this, recommend waiting (don't chase) |
 
 ## Running It Persistently
 
@@ -89,23 +100,39 @@ The script needs outbound access to your news feed hosts and (for `--quotes`) to
 `query1.finance.yahoo.com`. Some managed/sandboxed environments allowlist egress;
 run it where those hosts are reachable, or swap `--feeds` for a source you can hit.
 
-## Output Schema
+## Output: staged TRADE SIGNAL
 
-```json
-{
-  "ts": "2026-06-02T14:03:11Z",
-  "ticker": "ABCD",
-  "catalysts": ["positive_pr"],
-  "title": "Acme Bio Awarded $34M DoD Contract for ABC-4200",
-  "link": "https://...",
-  "quote": {
-    "price": 4.18, "volume": 6240000, "avg_vol_30d": 850000,
-    "rel_vol": 7.3, "change_pct": 28.4, "float": 11800000,
-    "exchange": "NasdaqCM", "currency": "USD"
-  },
-  "text": "🚀 ABCD [positive_pr] $4.18 +28.4% relvol 7.3x vol 6,240,000 float 11.8M :: Acme Bio Awarded $34M DoD Contract"
-}
+Each new match prints one JSON line whose `text` field is a ready-to-send signal,
+and whose `quote`/`levels` carry the structured numbers. The `text` renders as:
+
 ```
+🟢 TRADE SIGNAL: $SBFM  (+12.0%)
+
+Action: BUY Limit at $2.44 (Current Ask: $2.44)
+  • Or wait for pullback — take position at $2.20
+  • Or don't buy, just watch at $1.81
+
+Float: 4.2M | RVOL: 4.1x
+Volume: 100.0M
+Calculated Size: 1,639 shares (10% of $40,000 equity)
+Stop Loss (Hard): $2.25 (session low)
+Target (Sell 50%): $2.82  (2R)
+
+📰 Sunshine Biopharma Announces FDA Clearance (Nasdaq: SBFM)
+https://…
+```
+
+- **Header emoji**: 🟢 actionable now · 🟡 extended (`change_pct ≥ --extended-pct`) → recommends waiting for a pullback instead of chasing.
+- **Entry** = current ask; **pullback**/**watch** levels are `--pullback-pct` / `--watch-pct` below it.
+- **Stop (Hard)** = session low when it sits below entry, else a `--stop-pct` stop. *A true 15-minute-low stop needs intraday bars — that lives in `momentum_lifecycle.py`; the scanner uses the session low as the closest quote-level proxy.*
+- **Target (Sell 50%)** = entry + `--target-r` × (entry − stop).
+- **Size** = `--alloc-pct`% of `--equity` ÷ entry.
+
+The JSON line also includes `ticker`, `catalysts`, `title`, `link`, the raw `quote`,
+and a `levels` object (`entry`, `ask`, `stop`, `target`, `pullback`, `watch`, `size`).
+
+> Heuristic guidance from a single quote, **not** financial advice or an execution
+> feed — verify against live intraday data before acting.
 
 ## Staged Buy / Hold / Sell Lifecycle (`momentum_lifecycle.py`)
 

@@ -22,6 +22,10 @@ on:
         description: "Drop matches whose float/RVOL/%change can't be confirmed"
         type: boolean
         default: false
+      equity:
+        description: "Account equity for position sizing (USD)"
+        type: string
+        default: "25000"
 
 permissions:
   contents: read
@@ -53,6 +57,7 @@ jobs:
         env:
           ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
           STRICT_FLAG: ${{ (inputs.strict && '--strict') || '--no-strict' }}
+          EQUITY: ${{ inputs.equity || '25000' }}
         run: |
           if [ -z "$ALERT_WEBHOOK" ]; then
             echo "::error::ALERT_WEBHOOK secret is not set — add it under Settings > Secrets > Actions"
@@ -63,5 +68,6 @@ jobs:
           # the runner can't fetch float/RVOL/%change; flip via "Run workflow".
           python skills/stock-alert-monitor/monitor.py \
             --once $STRICT_FLAG \
+            --equity "$EQUITY" \
             --state .cache/seen.txt \
             --webhook "$ALERT_WEBHOOK"
