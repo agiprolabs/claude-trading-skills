@@ -66,8 +66,10 @@ jobs:
           mkdir -p .cache
           # --no-strict by default so keyword+price matches still alert even when
           # the runner can't fetch float/RVOL/%change; flip via "Run workflow".
+          # --max-price 20 targets micro/small caps under $20 per watch config.
           python skills/stock-alert-monitor/monitor.py \
             --once $STRICT_FLAG \
+            --max-price 20 \
             --equity "$EQUITY" \
             --state .cache/seen.txt \
             --webhook "$ALERT_WEBHOOK"
