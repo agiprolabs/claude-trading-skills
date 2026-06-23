@@ -1,6 +1,6 @@
 # Trading Skills — Complete Catalog
 
-This document provides detailed descriptions of all 62 trading skills organized by category.
+This document provides detailed descriptions of all 63 trading skills organized by category.
 
 ---
 
@@ -218,6 +218,13 @@ Black-Scholes pricing, binomial trees, Greeks computation, implied volatility su
 
 ### fixed-income
 Bond pricing, yield curves, duration/convexity. DeFi lending rate analysis (Aave, Compound, Solend, Marginfi).
+
+---
+
+## Prediction Markets
+
+### prediction-markets
+Kalshi & Polymarket event/weather prediction markets. YES/NO order-book conventions (both sides are bids on Kalshi; `no_ask = 1 − best_yes_bid`), temperature/range bracket structure and the half-integer-corrected forecast→P(YES) map, and per-venue settlement rules (Kalshi NWS CLI on LST/no-DST via IEM ASOS vs Polymarket Weather Underground on local-clock/DST; KNYC vs KLGA station divergence; bracket settles YES iff `cli ∈ {floor, cap}`). APIs: Kalshi RSA-PSS-signed REST/WS (`api.elections.kalshi.com/trade-api/v2`, dollar-string orders) and Polymarket Gamma + EIP-712 CLOB + on-chain CTF redemption. Covers overround, the favorite-longshot maker edge, and the backtesting pitfalls (wrong settlement source, phantom penny asks, date-in-ticker, clock-mismatch look-ahead) that manufacture phantom edges.
 
 ---
 
