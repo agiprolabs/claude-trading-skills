@@ -1,6 +1,6 @@
 # Trading Skills — Complete Catalog
 
-This document provides detailed descriptions of all 63 trading skills organized by category.
+This document provides detailed descriptions of all 67 trading skills organized by category.
 
 ---
 
@@ -223,8 +223,22 @@ Bond pricing, yield curves, duration/convexity. DeFi lending rate analysis (Aave
 
 ## Prediction Markets
 
-### prediction-markets
-Kalshi & Polymarket event/weather prediction markets. YES/NO order-book conventions (both sides are bids on Kalshi; `no_ask = 1 − best_yes_bid`), temperature/range bracket structure and the half-integer-corrected forecast→P(YES) map, and per-venue settlement rules (Kalshi NWS CLI on LST/no-DST via IEM ASOS vs Polymarket Weather Underground on local-clock/DST; KNYC vs KLGA station divergence; bracket settles YES iff `cli ∈ {floor, cap}`). APIs: Kalshi RSA-PSS-signed REST/WS (`api.elections.kalshi.com/trade-api/v2`, dollar-string orders) and Polymarket Gamma + EIP-712 CLOB + on-chain CTF redemption. Covers overround, the favorite-longshot maker edge, and the backtesting pitfalls (wrong settlement source, phantom penny asks, date-in-ticker, clock-mismatch look-ahead) that manufacture phantom edges.
+Split by **exchange** (API mechanics) and **market type** (contract semantics + settlement), plus a cross-cutting strategy layer.
+
+### kalshi-api
+Kalshi exchange mechanics, market-type-agnostic. Host (`api.elections.kalshi.com/trade-api/v2`; the old hosts 401), RSA-PSS request signing, the dollar-string order schema (`count_fp`/`yes_price_dollars`, `time_in_force`, `client_order_id` sanitization), the YES/NO bid-ladder order-book convention (`no_ask = 1 − best_yes_bid`), candlesticks, WebSocket market-discovery pipeline, rate limits, and order-lifecycle gotchas. Canonical doc URLs + a verify-before-hand-rolling directive (the host and order schema have changed before).
+
+### polymarket-api
+Polymarket exchange mechanics. On-chain Polygon CTF (YES/NO ERC-1155, $1 USDC collateral), the Gamma (read) + CLOB (EIP-712) + Data APIs, the `condition_id`/`clob_token_ids`/`token_id` model, WebSocket feed, on-chain `redeemPositions` settlement, UMA dispute resolution, and the US geo/KYC proxy constraint. Zero taker fees. Canonical docs + verify-first.
+
+### kalshi-weather-markets
+Daily temperature HIGH/LOW markets (market type). 2°F brackets `B<center>`={floor,cap} and thresholds `T<strike>` (strike_type not inferable from ticker), the half-integer-corrected forecast→P(YES) Gaussian map, NWS-CLI integer settlement on LST (bracket YES iff `cli ∈ {floor,cap}`), the cross-venue station/DST divergence (KNYC/LST vs Polymarket KLGA/WU/DST), CLI-space bias correction, and the weather-specific pitfalls. Builds on `kalshi-api`.
+
+### kalshi-crypto-index-markets
+Daily/hourly BTC/ETH (crypto) and S&P-500/Nasdaq-100 (index) RANGE markets (market type). Range-bracket structure on the underlying's level/price, the continuous Gaussian P(YES) with σ from the underlying's volatility, close-offset decision timing (vs weather's daily-extreme), settle-on-venue-`result` with a verify-the-reference caveat, and the HFT/latency caveat for hourlies. Builds on `kalshi-api`.
+
+### prediction-market-strategy
+Cross-cutting strategy/sizing/validation, venue- and market-type-agnostic. The favorite-longshot maker edge (sell the $0.05–0.20 tail; takers lose ~20% pre-fee, makers win), fee-aware net-edge selection + θ gate + fractional Kelly + exposure caps, the full strategy catalog with honest verdicts, the backtesting methodology and phantom-edge hall of fame, why forecast skill ≠ trading edge, and the supporting literature (Whelan, Polymarket-588M, Gupta).
 
 ---
 

@@ -1,11 +1,11 @@
 # Claude Trading Skills
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
-[![Skills](https://img.shields.io/badge/Skills-63-brightgreen.svg)](#whats-included)
+[![Skills](https://img.shields.io/badge/Skills-67-brightgreen.svg)](#whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io)
 [![Works with](https://img.shields.io/badge/Works_with-Claude_Code_|_Cursor_|_Codex_|_Gemini_CLI-blue.svg)](#getting-started)
 
-A comprehensive collection of **63 ready-to-use trading, DeFi, and quantitative finance [Agent Skills](https://agentskills.io)**. Works with Claude Code, Cursor, Codex, Gemini CLI, and [30+ other tools](https://agentskills.io). Transform your AI agent into a trading analyst capable of executing complex multi-step workflows across market data analysis, on-chain research, backtesting, risk management, tax compliance, and more.
+A comprehensive collection of **67 ready-to-use trading, DeFi, and quantitative finance [Agent Skills](https://agentskills.io)**. Works with Claude Code, Cursor, Codex, Gemini CLI, and [30+ other tools](https://agentskills.io). Transform your AI agent into a trading analyst capable of executing complex multi-step workflows across market data analysis, on-chain research, backtesting, risk management, tax compliance, and more.
 
 **Crypto/DeFi-first. Extensible to all of quant finance.**
 
@@ -43,7 +43,7 @@ A comprehensive collection of **63 ready-to-use trading, DeFi, and quantitative 
 - **Multi-step workflows** — Chain data retrieval → analysis → visualization in a single prompt
 
 ### 🎯 Comprehensive Coverage
-- **63 Skills** across 17 categories covering the full trading workflow
+- **67 Skills** across 17 categories covering the full trading workflow
 - **7 Market Data APIs** — Solana-native and cross-chain data sources
 - **6 Solana Infrastructure** tools for real-time streams, shreds, bundles, DEX aggregation, and transaction building
 - **5 On-Chain Analysis** tools for wallet profiling, whale tracking, sybil detection, and liquidity analysis
@@ -76,7 +76,7 @@ A comprehensive collection of **63 ready-to-use trading, DeFi, and quantitative 
 | 📉 **Data & Visualization** | 3 | Trading charts, OHLCV processing, trade journaling |
 | 🔬 **Market Microstructure** | 2 | DEX orderflow analysis, traditional LOB theory, market making |
 | 🔮 **Quant Finance** | 2 | Options pricing, fixed income |
-| 🗳️ **Prediction Markets** | 1 | Kalshi & Polymarket: YES/NO order books, temperature/range brackets, settlement, REST/WS/CLOB APIs |
+| 🗳️ **Prediction Markets** | 5 | Kalshi & Polymarket exchange APIs, weather + crypto/index range markets, and the cross-cutting strategy/sizing/backtesting layer |
 | 🧾 **Tax, Accounting & Compliance** | 7 | Cost basis, wash sales, tax-loss harvesting, exports, bookkeeping, reporting |
 
 Each skill includes:
@@ -107,7 +107,7 @@ The fastest way to install. Requires Claude Code v1.0.33+.
 /plugin install trading-skills@agiprolabs-claude-trading-skills
 ```
 
-**That's it!** All 63 skills are now available. Claude will automatically discover and use them when relevant to your trading tasks. Skills are namespaced as `/trading-skills:skill-name`.
+**That's it!** All 67 skills are now available. Claude will automatically discover and use them when relevant to your trading tasks. Skills are namespaced as `/trading-skills:skill-name`.
 
 **Managing the plugin:**
 
@@ -333,8 +333,12 @@ uv --version
 - **options-pricing** — Black-Scholes, Greeks, implied vol surfaces, crypto options
 - **fixed-income** — Bond pricing, yield curves, DeFi lending rate analysis
 
-### 🗳️ Prediction Markets (1 skill)
-- **prediction-markets** — Kalshi & Polymarket event/weather markets: YES/NO order-book conventions, temperature/range brackets + forecast→P(YES), per-venue settlement rules, REST/WebSocket/CLOB APIs (with canonical doc links + verify-first guidance), a strategy catalog with honest verdicts, fee-aware sizing/edge-gates, the favorite-longshot maker edge, and the backtesting pitfalls that manufacture phantom edges
+### 🗳️ Prediction Markets (5 skills)
+- **kalshi-api** — Kalshi exchange mechanics: host, RSA-PSS auth, dollar-string order schema, YES/NO order-book convention, candlesticks, WebSocket discovery, rate limits, lifecycle gotchas (canonical docs + verify-first)
+- **polymarket-api** — Polymarket exchange mechanics: Gamma/CLOB/Data APIs, EIP-712 auth, ERC-1155 token model, WebSocket, on-chain redemption, UMA disputes, US geo/KYC (canonical docs + verify-first)
+- **kalshi-weather-markets** — Daily temperature high/low brackets & thresholds: forecast→P(YES) Gaussian map, NWS-CLI/LST settlement, station/DST divergence, CLI-space bias correction
+- **kalshi-crypto-index-markets** — Daily/hourly BTC/ETH & S&P/Nasdaq range markets: range-bracket structure, σ-from-volatility modeling, close-offset decision timing, settle-on-venue-result
+- **prediction-market-strategy** — Cross-cutting: the favorite-longshot maker edge, fee-aware sizing & edge gates, backtesting methodology (the phantom-edge hall of fame), and the supporting literature
 
 ### 🧾 Tax, Accounting & Compliance (7 skills)
 - **tax-liability-tracking** — Real-time gain/loss tracking per trade and portfolio-wide
@@ -473,7 +477,7 @@ A: [Open an issue](https://github.com/agiprolabs/claude-trading-skills/issues) w
   title = {Claude Trading Skills: Trading, DeFi, and Quantitative Finance Agent Skills},
   year = {2026},
   url = {https://github.com/agiprolabs/claude-trading-skills},
-  note = {63 skills covering market data, on-chain analysis, backtesting, risk management, tax compliance, and more}
+  note = {67 skills covering market data, on-chain analysis, backtesting, risk management, tax compliance, and more}
 }
 ```
 
