@@ -2,6 +2,8 @@
 
 How range markets are defined, how a forecast maps to per-bracket probabilities, and the exact rules that decide payouts. Settlement is where most backtest errors live — get this wrong and you manufacture an edge that does not exist.
 
+> 📖 **Settlement-source references (verify the per-market spec before trusting any of this):** Kalshi market rules <https://docs.kalshi.com> (per-market "Rulebook"); NWS Climatological Report (CLI) <https://www.weather.gov/wrh/Climate>; IEM ASOS daily download <https://mesonet.agron.iastate.edu/request/daily.phtml> (100% match to Kalshi); Polymarket resolution via Weather Underground <https://www.wunderground.com> + UMA <https://docs.uma.xyz>. Settlement source, station, and day-window are **per-market contract terms that can change** — read each market's own rules/spec before scoring or trading it.
+
 ## Bracket structure (Kalshi temperature)
 
 - A bracket ticker `B<center>` is a **2°F-wide, both-ends-inclusive** window. `B74.5` covers the **two integers {74, 75}°F**.

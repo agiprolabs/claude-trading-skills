@@ -2,6 +2,8 @@
 
 On-chain prediction market on **Polygon**. Each market is a pair of YES/NO **ERC-1155** outcome tokens (the Conditional Token Framework, "CTF"), collateralized 1:1 by **USDC**. Off-chain CLOB order matching, on-chain settlement, **zero taker fees**.
 
+> 📖 **Canonical docs (verify before coding):** <https://docs.polymarket.com> (CLOB + Gamma + Data APIs); official SDK <https://github.com/Polymarket/py-clob-client>. **Prefer the SDK over hand-rolled EIP-712 signing**, and re-confirm hosts/endpoints/`signature_type` against the live docs + a smoke call before trusting the conventions below.
+
 ## Identifiers (you will juggle several)
 
 | ID | What it is |
@@ -77,4 +79,34 @@ US persons are **restricted** from Polymarket. Reaching the API from a US host t
 
 ## Brackets
 
-Weather range markets list ~**11 brackets of ~1°C** each (US markets quote °F, international °C), across ~50 global cities. Mutually exclusive; `outcomePrices` across an event sum to ~1.0 (overround applies just as on Kalshi).
+Weather range markets list ~**11 brackets of ~1°C** each (US markets quote °F, international °C), across ~50 global cities. Mutually exclusive; `outcomePrices` across an event sum to ~1.0 (overround applies just as on Kalshi). Markets expire at **12:00 UTC** on the resolution day (aligns with the WU midnight-to-midnight local-clock window). An event often mixes still-active and already-closed sub-markets — filter at **both** the event and market level on `active=True, closed=False`.
+
+## Full API surface
+
+| API | Host | Auth | Purpose |
+|-----|------|------|---------|
+| Gamma | `https://gamma-api.polymarket.com` | none | events/markets/conditions/prices metadata |
+| CLOB | `https://clob.polymarket.com` | EIP-712 | order book + order placement/cancel |
+| Data | `https://data-api.polymarket.com` | none | historical trades |
+| WebSocket | `wss://ws-subscriptions-clob.polymarket.com/ws/` | none (market) / JWT (user) | real-time book + trade ticks |
+
+- **Gamma pagination:** `limit=100&offset=N` (step 100) for a full history scrape.
+- **Chain:** Polygon mainnet `chain_id=137`. Collateral: USDC.e at `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`.
+- **Wallet env:** `POLYMARKET_PRIVATE_KEY`, `POLYMARKET_FUNDER`. `signature_type=2` for the proxy/Safe accounts the web UI creates (the funder is the Safe); `0` for a raw EOA.
+
+## Truth-source priority & known-bad dates
+
+For settling/scoring Polymarket weather: **IEM METAR (0.0–0.3°C MAE) > WU API > Open-Meteo (fallback)**. WU history occasionally returns wrong/missing data — keep a hardcoded bad-date set (observed: `2026-03-08`, `2026-03-19`, `2026-04-18`) and a manual-override path. The per-city resolution **station mapping is unconfirmed** for Polymarket — verify against each market's contract spec before trusting settlement fidelity.
+
+## Trading-parameter defaults (reference)
+
+```python
+POLYMARKET_FEE_RATE = 0.0           # zero taker fees
+MIN_EDGE_POLYMARKET = 0.05          # 5% min net edge after slippage
+MIN_CITY_HITRATE = 0.45             # only trade ~45%+ hit-rate cities (~22 of 50)
+MAX_BET_FRACTION = 0.015            # 1.5% of bankroll per trade
+MAX_DAILY_WAGER_FRACTION = 0.15     # 15% deployed per day
+MAX_SLIPPAGE_FRACTION_OF_EDGE = 0.50
+N_BRACKETS_TYPICAL = 11
+BRACKET_WIDTH_C_TYPICAL = 1
+```

@@ -9,6 +9,12 @@ Binary event contracts that settle to **$1 (YES) or $0 (NO)**. Price = the marke
 
 > ⚠️ Analysis/research toolkit. Not financial advice. Live order placement is gated behind your own explicit sign-off — default to read-only.
 
+> 🔌 **APIs drift — verify against the live docs before you hand-roll code.** The conventions here were verified at a point in time, and Kalshi has *already* changed its host and order schema once (the old host/schema now 401/400). Before writing any client code, re-check the official docs and prefer the official SDK where one exists:
+> - **Kalshi** — API reference: <https://docs.kalshi.com> (historically <https://trading-api.readme.io>); starter code: <https://github.com/Kalshi/kalshi-starter-code-python>
+> - **Polymarket** — docs: <https://docs.polymarket.com>; CLOB SDK: <https://github.com/Polymarket/py-clob-client>
+>
+> Treat anything here the live docs contradict as stale. Confirm the host, auth scheme, and request/response field names against the docs (and a single live smoke call) before trusting hand-rolled signing or order bodies.
+
 ## The mental model (read this first)
 
 1. **Price is probability.** A contract at $0.30 implies P(event)=30%. YES + NO ≈ $1.00.
@@ -160,13 +166,50 @@ The same metro can settle to **different values on the two venues** in DST month
 
 Full list with the numbers in `references/lessons-and-pitfalls.md`.
 
+## Sizing & edge selection
+
+Select on **fee-aware net edge**, gate on a threshold, size with fractional Kelly, cap exposure:
+
+```
+net_edge   = p_model − ask − fee(ask)        # fee = ceil(0.07·ask·(1−ask)·100)/100 ; Polymarket fee = 0
+trade if   net_edge > θ                       # θ = 15% (<$2k acct) / 20% (≥$2k) ; Polymarket ~5%
+limit_¢    = floor((p_model − θ)·100)          # rest your bid θ below model fair value
+size       = fractional_kelly(net_edge, entry), capped: 1.5%/trade, 15%/day, slippage ≤ 50% of edge
+```
+
+The maker side is where the profit is (takers lose ~20% pre-fee); the trade-off is fill uncertainty on thin tails. Full rules + a helper (`scripts/sizing_and_settlement.py`) in `references/sizing-and-edge-gates.md`.
+
+## Strategy catalog (what survived testing)
+
+| Strategy | Verdict |
+|---|---|
+| **Favorite-longshot fade, maker-side** (sell the $0.05–$0.20 tail) | ✅ the durable edge — structural, not forecasting |
+| Bracket YES-only longshot (forecast-gated, fee-aware) | ✅ works, fee-sensitive |
+| Market-making / liquidity provision | ⚠️ structurally favored but infra-heavy |
+| Overround / dutching arbitrage | ⚠️ marginal on Kalshi (per-leg fees eat it) |
+| Cross-venue Kalshi↔Polymarket arb | ❌ blocked (geo/KYC, capital lockup, resolution divergence) |
+| Latency / news front-running | ❌ HFT/colo game |
+| Copy-the-sharps | ❌ survivorship + capacity decay |
+
+Full catalog with evidence, capacity, and the catch for each in `references/strategy-catalog.md`.
+
+## Forecasting is usually NOT the edge
+
+A good weather forecast typically does **not** beat the market at decision time — the price already incorporates the same observations (`corr(model_p − market_p, realized) ≈ 0`). Build the calibrated forecast (ensemble quantiles → μ,σ, nowcast blend, CLI-space bias correction) to use as a **tail filter** on the structural longshot-sell, not as standalone alpha. See `references/forecasting-for-brackets.md`.
+
 ## Files
 
 ### References
-- `references/kalshi-api.md` — Host, RSA-PSS auth, order schema (fixed-point dollar strings, `time_in_force`, `client_order_id`), tickers, WebSocket discovery, candlesticks, rate limits, and the contradictions of stale docs.
-- `references/polymarket-api.md` — Gamma + CLOB + Data APIs, EIP-712 auth, `condition_id`/`token_id` model, WebSocket, on-chain redemption, UMA disputes, geo/KYC.
-- `references/brackets-and-settlement.md` — Bracket & threshold → P(YES) formulas, the exact per-venue settlement rounding rules, station/DST/source divergences, and overround.
-- `references/lessons-and-pitfalls.md` — The favorite–longshot edge, settle-on-venue-result, phantom-ask depth, look-ahead, and the maker/taker economics (with sources).
+- `references/kalshi-api.md` — Canonical docs URL + verify-first note; host, RSA-PSS auth, full endpoint surface, order schema (fixed-point dollar strings, `time_in_force`, `client_order_id`), tickers, WebSocket discovery, candlesticks, rate limits, order-lifecycle gotchas, and the contradictions of stale docs.
+- `references/polymarket-api.md` — Canonical docs URL + verify-first note; Gamma + CLOB + Data APIs, EIP-712 auth, `condition_id`/`token_id` model, WebSocket, on-chain redemption, UMA disputes, geo/KYC, and trading-parameter defaults.
+- `references/brackets-and-settlement.md` — Bracket & threshold → P(YES) formulas, the exact per-venue settlement rounding rules, settlement-source URLs, station/DST/source divergences, and overround.
+- `references/strategy-catalog.md` — Every strategy evaluated with an honest verdict (✅/⚠️/❌), the evidence, capacity, and the catch.
+- `references/sizing-and-edge-gates.md` — Fee-aware net-edge selection, the θ gate, limit-price formula, fractional Kelly, and exposure caps.
+- `references/forecasting-for-brackets.md` — Ensemble quantiles → μ,σ, nowcast blending, CLI-space bias correction, model-skill numbers, and why forecast skill ≠ trading edge.
+- `references/backtesting-methodology.md` — Settle-on-venue-result, the phantom-edge hall of fame (with magnitudes), leak-free validation, real-ladder fills, and forward paper-trading.
+- `references/lessons-and-pitfalls.md` — The favorite–longshot edge, settle-on-venue-result, phantom-ask depth, look-ahead, postmortems, and the maker/taker economics.
+- `references/evidence-and-literature.md` — Academic + practitioner sources (Whelan; Polymarket 588M; Gupta) and the empirical basis for the maker edge.
 
 ### Scripts
 - `scripts/orderbook_and_brackets.py` — YES/NO conversion, overround, Kalshi fee, and the Gaussian bracket→P(YES) map (pure functions, no network, no keys).
+- `scripts/sizing_and_settlement.py` — Fee-aware net edge, θ gate, limit price, fractional-Kelly sizing, slippage guard, and bracket/threshold settlement resolution against an integer CLI value.

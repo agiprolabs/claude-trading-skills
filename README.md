@@ -334,7 +334,7 @@ uv --version
 - **fixed-income** — Bond pricing, yield curves, DeFi lending rate analysis
 
 ### 🗳️ Prediction Markets (1 skill)
-- **prediction-markets** — Kalshi & Polymarket event/weather markets: YES/NO order-book conventions, temperature/range brackets and the forecast→P(YES) map, per-venue settlement rules, REST/WebSocket/CLOB APIs, and the favorite-longshot edge + backtesting pitfalls
+- **prediction-markets** — Kalshi & Polymarket event/weather markets: YES/NO order-book conventions, temperature/range brackets + forecast→P(YES), per-venue settlement rules, REST/WebSocket/CLOB APIs (with canonical doc links + verify-first guidance), a strategy catalog with honest verdicts, fee-aware sizing/edge-gates, the favorite-longshot maker edge, and the backtesting pitfalls that manufacture phantom edges
 
 ### 🧾 Tax, Accounting & Compliance (7 skills)
 - **tax-liability-tracking** — Real-time gain/loss tracking per trade and portfolio-wide
