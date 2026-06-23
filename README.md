@@ -9,6 +9,8 @@ A comprehensive collection of **67 ready-to-use trading, DeFi, and quantitative 
 
 **Crypto/DeFi-first. Extensible to all of quant finance.**
 
+> 🙌 **Add your skills — pull requests welcome!** This collection grows from the community's real trading and research experience. **Built something useful?** A new exchange or chain, a market type, a data source, a strategy, or a hard-won lesson — **[open a PR](CONTRIBUTING.md)** and share it. The bar is simple: a working `SKILL.md` in the [Agent Skills](https://agentskills.io) format with honest, tested guidance (see **[CONTRIBUTING.md](CONTRIBUTING.md)**). Every contribution helps the whole community trade smarter.
+
 <p align="center">
   <img src="claude-trading-skills.gif" alt="Claude Trading Skills Demo" width="800"/>
 </p>
