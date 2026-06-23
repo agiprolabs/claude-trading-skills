@@ -156,9 +156,11 @@ def analyze_drawdowns(equity: np.ndarray) -> DrawdownSummary:
 
     current_dd_start: Optional[int] = None
     if current_dd > 0.001:
-        # Find when the current drawdown started
-        peak_idx = int(np.argmax(equity))
-        current_dd_start = peak_idx
+        # Find the latest all-time high before the current underwater period.
+        # np.argmax returns the first max, which can overstate drawdown duration
+        # after an equity curve retests the same peak and then sells off again.
+        peak_indices = np.flatnonzero(equity == peak)
+        current_dd_start = int(peak_indices[-1])
 
     # Time underwater
     peaks = np.maximum.accumulate(equity)
