@@ -2,6 +2,8 @@
 
 CFTC-regulated US event exchange. USD-denominated, RSA-signed REST + WebSocket. Sources cross-validated across three production codebases.
 
+> 📖 **Canonical docs (verify before coding — this API has changed before):** API reference <https://docs.kalshi.com> (legacy <https://trading-api.readme.io>); official starter code <https://github.com/Kalshi/kalshi-starter-code-python>. The host, order schema, and field names below were correct at audit time but **re-confirm them against the live docs + one smoke call before hand-rolling** signing or order bodies — the old host (`trading-api.kalshi.com`) and the integer-cents order schema both broke when Kalshi changed them.
+
 ## Host & versioning
 
 - **Base URL: `https://api.elections.kalshi.com/trade-api/v2`**
@@ -90,4 +92,42 @@ GET /markets/{ticker}/orderbook?depth=
 
 - Source: **NWS CLI** daily climate report (integer °F), **LST** window (no DST). Mirrored by **IEM ASOS** daily, which is a **100% match** to Kalshi payouts.
 - **Grid-actuals / model reanalysis are NOT the settlement source** — they are leaky and inaccurate; do not settle backtests on them.
-- CLI ≠ raw METAR; a per-city seasonal bias correction may be needed when forecasting *toward* the CLI value.
+- CLI ≠ raw METAR; a per-city seasonal bias correction may be needed when forecasting *toward* the CLI value. See `forecasting-for-brackets.md`.
+
+## Full endpoint surface (verified)
+
+```
+# Portfolio
+GET    /trade-api/v2/portfolio/balance
+GET    /trade-api/v2/portfolio/positions
+GET    /trade-api/v2/portfolio/orders[?status=resting|canceled|executed]
+GET    /trade-api/v2/portfolio/orders/{order_id}
+POST   /trade-api/v2/portfolio/orders                      # place
+DELETE /trade-api/v2/portfolio/orders/{order_id}           # cancel -> 200 {"order":{... status:"canceled"}}
+POST   /trade-api/v2/portfolio/orders/{id}/amend           # ticker REQUIRED in body, else 400
+POST   /trade-api/v2/portfolio/orders/{id}/decrease        # body {"reduce_by_fp":"1.00"}; to-zero closes it
+POST   /trade-api/v2/portfolio/orders/batched              # body {"orders":[...]}
+GET    /trade-api/v2/portfolio/fills[?limit=N]
+GET    /trade-api/v2/portfolio/settlements[?limit=N]
+GET    /trade-api/v2/portfolio/deposits | /withdrawals
+# Market data (all require auth)
+GET    /trade-api/v2/markets?event_ticker={event}[&with_nested_markets=true][&limit=500]
+GET    /trade-api/v2/markets/{ticker}/orderbook
+GET    /trade-api/v2/series/{series}/markets/{ticker}/candlesticks?start_ts=&end_ts=&period_interval=60
+GET    /trade-api/v2/markets/trades                        # recent trade prints
+```
+
+### Market metadata fields (from `/markets`)
+`ticker`, `series`, `event_ticker`, `strike_type` (`"greater"`/`"less"`/`"bracket"`), `floor_strike`, `cap_strike` (floats), `subtitle`, `close_ts`, and `result` (`"yes"`/`"no"`/`""`). **`result` is the simplest authoritative settlement source** — read it post-resolution instead of re-deriving truth.
+
+### Orderbook response (two variants — normalize)
+```
+{"orderbook": {"yes": [[price, size], ...], "no": [[price, size], ...]}}
+```
+- `yes`/`no` are both **resting bid** ladders. Prices may be **integer cents** OR **dollar floats** depending on the API tier (`orderbook_fp.yes_dollars` vs `orderbook.yes`). Normalize: if a price value is `> 1.0`, divide by 100.
+
+### Order-lifecycle gotchas
+- `amend` **silently 400s** if `ticker` is omitted from the body.
+- `decrease` to zero **closes** the order; a subsequent `DELETE` returns **404**, not 400 — handle gracefully.
+- Response fill quantity is `fill_count_fp` (string), and prices are `*_price_dollars` strings — not `filled_count`/`yes_price`.
+- Demo host (`https://demo-api.kalshi.co`, WS `wss://external-api-ws.demo.kalshi.co/trade-api/ws/v2`) is order-lifecycle testing only — its book is near-empty; real prices need production even for read-only candlestick pulls. Demo 429s after ~24 rapid calls.
