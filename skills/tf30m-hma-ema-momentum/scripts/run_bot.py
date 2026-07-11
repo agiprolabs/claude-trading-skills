@@ -32,14 +32,26 @@ Configuration (environment variables):
     SYMBOLS            comma-separated symbols     (default: BTC/USDT:USDT)
     PAPER              true/false                  (default: true)
     BALANCE            paper starting balance      (default: 10000)
-    LEVERAGE           futures leverage            (default: 1)
-    MARGIN_FRACTION    fraction of balance/trade   (default: 0.05)
+    LEVERAGE           futures leverage, scales position size (default: 1)
+    MARGIN_FRACTION    fraction of balance used as margin/trade (default: 0.05)
     MARGIN_MODE        okx tdMode: cross|isolated  (default: cross)
     MAX_DRAWDOWN_PCT   halt trading at drawdown    (default: 0.15)
     POLL_SECONDS       new-bar check interval      (default: 20)
     MAX_OPEN_POSITIONS portfolio-wide position cap  (default: 2)
     OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSWORD   live credentials
     TELEGRAM_TOKEN / TELEGRAM_CHAT_ID                 optional alerts
+
+Leverage and position size:
+    notional_per_trade = balance * MARGIN_FRACTION * LEVERAGE
+    e.g. MARGIN_FRACTION=0.05, LEVERAGE=20 -> ~100% of balance notional per
+    trade. Margin locked stays MARGIN_FRACTION*balance; leverage multiplies
+    exposure (and therefore PnL swings) on top of that margin, same as a real
+    leveraged futures position. Higher leverage does NOT change the ATR-based
+    stop distance (still ATR14 x 1.5 in price terms) -- it changes how much of
+    the account that same price move represents. Sizing higher than your
+    liquidation buffer risks the exchange liquidating you before the bot's own
+    stop-loss order fires (network/API lag, fast moves). Test thoroughly in
+    PAPER mode at your intended LEVERAGE before going live.
 
 Position limits (both enforced by RiskManager, independent of symbol count):
     - At most MAX_OPEN_POSITIONS positions open across the whole bot (default 2).
@@ -299,8 +311,14 @@ class TF30MBot:
         entry = float(row["close"])
         atr = float(row["atr14"])
         sl, tp = self._sl_tp(direction, entry, atr)
-        notional = self.balance * self.margin_fraction
-        amount = self.risk.size_position(self.balance, entry)  # base-asset amount
+        # RiskManager.size_position sizes an unlevered (1x) notional equal to
+        # margin_fraction * balance. Leverage multiplies that into the actual
+        # notional exposure -- the margin locked stays margin_fraction*balance,
+        # but PnL swings (and the amount sent to the exchange) scale with
+        # leverage, exactly like a real leveraged futures position.
+        margin_amount = self.balance * self.margin_fraction
+        notional = margin_amount * self.leverage
+        amount = self.risk.size_position(self.balance, entry) * self.leverage
         if amount <= 0:
             trader.sm.on_position_closed()
             return

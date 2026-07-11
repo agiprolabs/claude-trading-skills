@@ -160,18 +160,34 @@ ccxt (OKX futures) → TF30MStateMachine → RiskManager → TelegramNotifier
 
 - **Data/execution**: ccxt, default exchange `okx`, USDT perpetuals
   (`BTC/USDT:USDT`) — supports both **long and short**.
-- **Risk**: `RiskManager` handles position sizing (5% notional), a
+- **Risk**: `RiskManager` sizes the margin (`MARGIN_FRACTION` × balance,
+  default 5%); `run_bot.py` then scales that into the actual traded notional
+  by `LEVERAGE` (`notional = balance × MARGIN_FRACTION × LEVERAGE`), same as a
+  real leveraged futures position — margin locked stays 5% of balance, but
+  exposure and PnL swings scale with leverage. A
   **portfolio-wide cap of `MAX_OPEN_POSITIONS` (default 2)**, a hard
   **1-position-per-symbol limit** (a symbol already holding a LONG cannot also
   open a SHORT, or a second LONG — enforced in `RiskManager.can_open`
   regardless of symbol count), and a max-drawdown halt (default 15%, with
-  auto-recovery). ATR(14)×1.5 stop/take-profit (1:1) are passed explicitly,
-  overriding the module's percentage defaults so the bot matches the TF30M spec.
+  auto-recovery) round out the guardrails. ATR(14)×1.5 stop/take-profit (1:1)
+  are passed explicitly, overriding the module's percentage defaults so the
+  bot matches the TF30M spec.
 - **Alerts/commands**: `TelegramNotifier` sends entry/exit/halt alerts and
   serves `/stats`, `/status`, `/positions`, `/log`, `/stop`.
 - **PAPER by default** — fills are simulated against each closed bar's
   high/low and balance is tracked internally. Set `PAPER=false` (plus OKX
   keys) only after testing.
+
+⚠️ **LEVERAGE scales real risk, not just margin efficiency.** With
+`MARGIN_FRACTION=0.05` and `LEVERAGE=20`, each trade's notional is ~100% of
+balance — the ATR(14)×1.5 stop distance in price terms doesn't change, but
+the same price move now represents 20× more of your account. High leverage
+also adds **liquidation risk**: if price gaps past your maintenance margin
+before the bot's own stop-loss order fires (API lag, fast moves, exchange
+downtime), the exchange can liquidate the position at a worse price than the
+strategy's intended SL. Paper-test at your target leverage first, and confirm
+OKX's maintenance margin requirement at that leverage leaves headroom beyond
+the ATR stop distance.
 
 ⚠️ **LIVE mode places real orders.** Verify order placement on OKX (position
 mode, margin mode, contract size) on a small size or testnet first — the
