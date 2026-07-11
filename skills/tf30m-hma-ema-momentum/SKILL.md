@@ -158,8 +158,10 @@ ccxt (OKX futures) → TF30MStateMachine → RiskManager → TelegramNotifier
    market data          entry/exit          sizing & guards    alerts + commands
 ```
 
-- **Data/execution**: ccxt, default exchange `okx`, USDT perpetuals
-  (`BTC/USDT:USDT`) — supports both **long and short**.
+- **Data/execution**: ccxt, default exchange `okx`, USDT perpetuals —
+  supports both **long and short**. Default watchlist: `BTC/USDT:USDT`,
+  `ETH/USDT:USDT`, `SOL/USDT:USDT`, `XRP/USDT:USDT`, `XAU/USDT:USDT` (gold),
+  `XAG/USDT:USDT` (silver); override with `SYMBOLS`.
 - **Timeframe**: `TIMEFRAME` selects the ccxt bar size — designed for `30m`,
   `15m` is also supported. Indicator periods (HMA20, EMA5/9, ROC9, RSI14,
   ADX14, ATR14, Volume SMA20) are bar counts, not durations, so they're reused
@@ -183,9 +185,14 @@ ccxt (OKX futures) → TF30MStateMachine → RiskManager → TelegramNotifier
   bot matches the TF30M spec.
 - **Alerts/commands**: `TelegramNotifier` sends entry/exit/halt alerts and
   serves `/stats`, `/status`, `/positions`, `/log`, `/stop`.
-- **PAPER by default** — fills are simulated against each closed bar's
-  high/low and balance is tracked internally. Set `PAPER=false` (plus OKX
-  keys) only after testing.
+- **PAPER by default, even with keys present** — fills are simulated against
+  each closed bar's high/low and balance is tracked locally starting from
+  `BALANCE` (default $10,000). Set `PAPER=false` explicitly (in addition to
+  the OKX keys) to go live — it is never inferred from key presence. In LIVE
+  mode `BALANCE` is ignored: the bot fetches your real OKX account balance at
+  startup and once per poll cycle (`_sync_balance()`) and sizes positions off
+  that instead, so sizing tracks your actual equity rather than a stale
+  guess.
 
 ⚠️ **LEVERAGE scales real risk, not just margin efficiency.** With
 `MARGIN_FRACTION=0.05` and `LEVERAGE=20`, each trade's notional is ~100% of
@@ -205,29 +212,33 @@ reduce-only SL/TP params may need tuning for your account configuration.
 ```bash
 uv pip install pandas numpy ccxt aiohttp
 
-# Paper trade the BTC/ETH/SOL/XRP/XAU/XAG OKX watchlist on 30m (no keys required):
-SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT,SOL/USDT:USDT,XRP/USDT:USDT,XAU/USDT:USDT,XAG/USDT:USDT" \
-    python scripts/run_bot.py
+# Paper trade the default watchlist (BTC/ETH/SOL/XRP/XAU/XAG) on 30m, no keys required:
+python scripts/run_bot.py
 
 # Same, but on 15m bars:
-TIMEFRAME=15m SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT,SOL/USDT:USDT,XRP/USDT:USDT,XAU/USDT:USDT,XAG/USDT:USDT" \
-    python scripts/run_bot.py
+TIMEFRAME=15m python scripts/run_bot.py
+
+# Override the watchlist:
+SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT" python scripts/run_bot.py
 
 # Offline: replay a CSV bar-by-bar through the full bot pipeline:
 python scripts/run_bot.py --replay candles_30m.csv --symbol BTC/USDT:USDT
 
-# Live (real orders — requires keys + explicit opt-in):
+# Live (real orders — requires keys + explicit PAPER=false opt-in; the
+# default watchlist/timeframe/leverage/risk limits apply automatically):
 PAPER=false OKX_API_KEY=... OKX_API_SECRET=... OKX_API_PASSWORD=... \
-    SYMBOLS="BTC/USDT:USDT" python scripts/run_bot.py
+    python scripts/run_bot.py
 ```
 
-Key environment variables (see the header of `run_bot.py` for the full list):
-`EXCHANGE_ID`, `TIMEFRAME` (default `30m`), `SYMBOLS`, `PAPER`, `BALANCE`,
-`LEVERAGE`, `MARGIN_FRACTION`, `MARGIN_MODE`, `MAX_OPEN_POSITIONS` (default
-2), `MAX_DRAWDOWN_PCT`, `POLL_SECONDS`, `OKX_API_KEY` / `OKX_API_SECRET` /
-`OKX_API_PASSWORD`, `TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID`. `.env.example` in
-this skill's root
-lists every variable with the recommended starting values.
+All configuration is optional with defaults baked into `run_bot.py` — a bare
+`python scripts/run_bot.py` with no environment variables at all runs PAPER
+mode on the default watchlist (BTC/ETH/SOL/XRP/XAU/XAG), `TIMEFRAME=30m`,
+`LEVERAGE=20`, `MAX_OPEN_POSITIONS=2`. For a Railway deploy, that means you
+only need to set 5 variables — `OKX_API_KEY`, `OKX_API_SECRET`,
+`OKX_API_PASSWORD`, `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` — everything else is
+already correct. `.env.example` in this skill's root documents every
+variable (required block + commented-out optional overrides); see the header
+of `run_bot.py` for the same list inline with the code.
 
 ### Deploying on Railway
 
@@ -241,13 +252,25 @@ needed — it's a background loop, not a web server):
 3. **Settings → Deploy**: the start command comes from `railway.json`
    (`python scripts/run_bot.py`) — no need to set it manually. `Procfile` is
    included too as a fallback if you switch builders.
-4. **Variables tab**: copy every key from `.env.example` and set your values
-   (`SYMBOLS`, `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID`, and OKX keys once you're
-   ready for `PAPER=false`). Leave `PAPER=true` for the first deploy.
-5. Deploy, then watch the **Deployments → Logs** tab — you should see
-   `TF30M bot started | okx | PAPER | symbols=[...]` and, a bar or two later,
-   `synced to bar ...`.
-6. If Telegram is configured, `/stats` and `/status` work immediately;
+4. **Variables tab**: every other setting already has a matching default in
+   `run_bot.py` (watchlist BTC/ETH/SOL/XRP/XAU/XAG, `TIMEFRAME=30m`,
+   `LEVERAGE=20`, `MAX_OPEN_POSITIONS=2`, `PAPER=true`, ...) — you only need
+   to set 5 variables:
+   `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSWORD`, `TELEGRAM_TOKEN`,
+   `TELEGRAM_CHAT_ID`. See `.env.example` for the full optional list if you
+   want to override anything (different symbols, timeframe, leverage, etc.).
+5. **`PAPER` stays `true` even with the OKX keys filled in** — the bot will
+   not place real orders, and won't even attach the keys to the exchange
+   client, until you explicitly add `PAPER=false` as its own variable. This
+   is intentional: adding keys just gets the bot ready for live, it doesn't
+   flip the switch. Confirm paper behavior looks right first, then add
+   `PAPER=false` when you're ready.
+6. Deploy, then watch the **Deployments → Logs** tab — you should see
+   `TF30M bot started | okx | PAPER | symbols=[...] | balance=$10000.00` and,
+   a bar or two later, `synced to bar ...`. Once you flip to `PAPER=false`,
+   that line instead shows `LIVE` and the real balance fetched from OKX
+   (`Synced live balance from okx: $...`) — sizing uses that, not `BALANCE`.
+7. If Telegram is configured, `/stats` and `/status` work immediately;
    `restartPolicyType: ON_FAILURE` in `railway.json` restarts the worker if it
    crashes (e.g. a transient exchange API error).
 
@@ -296,8 +319,8 @@ python scripts/tf30m_hma_ema_strategy.py --demo
 # Your own 30m candles: CSV with open,high,low,close,volume (ascending time)
 python scripts/tf30m_hma_ema_strategy.py --csv candles_30m.csv --balance 10000
 
-# Paper-trade live on OKX (no keys needed)
-SYMBOLS="BTC/USDT:USDT" python scripts/run_bot.py
+# Paper-trade live on OKX, default watchlist, no keys needed
+python scripts/run_bot.py
 ```
 
 Programmatic use:

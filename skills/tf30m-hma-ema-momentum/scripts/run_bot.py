@@ -17,23 +17,29 @@ from `fetch_positions`. Test on PAPER (and your exchange testnet) before ever
 setting PAPER=false.
 
 Usage:
-    # Paper trade OKX BTC + ETH perpetuals, no keys needed:
-    SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT" python run_bot.py
+    # Paper trade the default watchlist (BTC/ETH/SOL/XRP/XAU/XAG), no keys needed:
+    python run_bot.py
 
     # Replay a CSV bar-by-bar through the full pipeline (offline test):
     python run_bot.py --replay candles_30m.csv --symbol BTC/USDT:USDT
 
-    # Live (requires OKX keys + explicit opt-in):
+    # Live (requires OKX keys + explicit PAPER=false opt-in; everything else
+    # -- symbols, timeframe, leverage, risk limits -- uses the defaults below):
     PAPER=false OKX_API_KEY=... OKX_API_SECRET=... OKX_API_PASSWORD=... \
-        SYMBOLS="BTC/USDT:USDT" python run_bot.py
+        python run_bot.py
 
-Configuration (environment variables):
+Configuration (environment variables) -- all optional, sensible defaults below:
     EXCHANGE_ID        ccxt exchange id           (default: okx)
     TIMEFRAME          ccxt bar size, e.g. 15m/30m/1h  (default: 30m)
-    SYMBOLS            comma-separated symbols     (default: BTC/USDT:USDT)
-    PAPER              true/false                  (default: true)
-    BALANCE            paper starting balance      (default: 10000)
-    LEVERAGE           futures leverage, scales position size (default: 1)
+    SYMBOLS            comma-separated symbols     (default: BTC/ETH/SOL/XRP/
+                                                     XAU/XAG USDT perpetuals,
+                                                     see DEFAULT_SYMBOLS below)
+    PAPER              true/false                  (default: true -- stays true even
+                                                     if OKX keys are set; flip
+                                                     explicitly to go live)
+    BALANCE            paper starting balance; ignored in LIVE mode, where
+                       the real OKX account balance is fetched instead (default: 10000)
+    LEVERAGE           futures leverage, scales position size (default: 20)
     MARGIN_FRACTION    fraction of balance used as margin/trade (default: 0.05)
     MARGIN_MODE        okx tdMode: cross|isolated  (default: cross)
     MAX_DRAWDOWN_PCT   halt trading at drawdown    (default: 0.15)
@@ -108,6 +114,13 @@ logger = logging.getLogger("tf30m_bot")
 
 MIN_WARMUP_BARS = 60          # bars needed before indicators are usable
 FETCH_LIMIT = 320             # history depth per poll (indicator warmup + margin)
+
+# Default watchlist: BTC, ETH, SOL, XRP, and the gold/silver perpetuals
+# (XAU/XAG) on OKX USDT-margined swaps. Override with SYMBOLS to change it.
+DEFAULT_SYMBOLS = (
+    "BTC/USDT:USDT,ETH/USDT:USDT,SOL/USDT:USDT,"
+    "XRP/USDT:USDT,XAU/USDT:USDT,XAG/USDT:USDT"
+)
 
 
 def _timeframe_minutes(tf: str) -> float:
@@ -187,11 +200,15 @@ class TF30MBot:
         # references/strategy_spec.md for the bar-count vs. duration distinction).
         self.strategy_tag = f"hma_ema_{self.timeframe}"
         self.symbols = [
-            s.strip() for s in os.getenv("SYMBOLS", "BTC/USDT:USDT").split(",") if s.strip()
+            s.strip() for s in os.getenv("SYMBOLS", DEFAULT_SYMBOLS).split(",") if s.strip()
         ]
+        # PAPER stays true by default even if OKX keys are present -- going
+        # live requires explicitly setting PAPER=false, never inferred from
+        # the presence of credentials.
         self.paper = os.getenv("PAPER", "true").lower() != "false"
-        self.balance = float(os.getenv("BALANCE", "10000"))
-        self.leverage = float(os.getenv("LEVERAGE", "1"))
+        self.balance = float(os.getenv("BALANCE", "10000"))  # overwritten by
+        # _sync_balance() from the real OKX account once PAPER=false.
+        self.leverage = float(os.getenv("LEVERAGE", "20"))
         self.margin_fraction = float(os.getenv("MARGIN_FRACTION", "0.05"))
         self.margin_mode = os.getenv("MARGIN_MODE", "cross")
         self.poll_seconds = float(os.getenv("POLL_SECONDS", "20"))
@@ -276,6 +293,37 @@ class TF30MBot:
         ex = klass(cfg)
         ex.load_markets()
         return ex
+
+    def _sync_balance(self) -> None:
+        """Refresh self.balance from the real OKX account (LIVE mode only).
+
+        PAPER mode is intentionally self-contained and never calls this --
+        its balance is simulated locally starting from BALANCE. In LIVE mode,
+        position sizing (margin_fraction * leverage) must be based on real
+        account equity, not the BALANCE env var (which only seeds the paper
+        simulator), so this is called once at startup and once per poll cycle.
+        On a fetch error, the last known balance is kept and a warning logged
+        -- sizing simply uses slightly stale data rather than crashing.
+        """
+        if self.paper:
+            return
+        try:
+            bal = self.exchange.fetch_balance()
+            usdt = bal.get("USDT", {}) if isinstance(bal, dict) else {}
+            total = usdt.get("total")
+            if total is None:
+                total = (bal.get("total") or {}).get("USDT")
+            if total is not None and float(total) > 0:
+                self.balance = float(total)
+                logger.info("Synced live balance from %s: $%.2f", self.exchange_id, self.balance)
+            else:
+                logger.warning(
+                    "fetch_balance returned no positive USDT total; keeping balance=$%.2f",
+                    self.balance,
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Balance sync failed (%s); keeping last known balance=$%.2f",
+                           e, self.balance)
 
     def _fetch_closed_df(self, symbol: str) -> pd.DataFrame:
         """Fetch OHLCV and drop the still-forming last candle."""
@@ -531,6 +579,7 @@ class TF30MBot:
 
     def run(self) -> None:
         self.exchange = self._make_exchange()
+        self._sync_balance()  # LIVE only; no-op in PAPER
         self.running = True
 
         # Telegram polling on a background asyncio loop.
@@ -539,11 +588,13 @@ class TF30MBot:
         self.notifier.start_polling(tg_loop)
         self.notifier.notify_bot_started(self.paper, [self.strategy_tag], self.symbols)
 
-        logger.info("TF30M bot started | %s | %s | symbols=%s",
-                    self.exchange_id, "PAPER" if self.paper else "LIVE", self.symbols)
+        logger.info("TF30M bot started | %s | %s | symbols=%s | balance=$%.2f",
+                    self.exchange_id, "PAPER" if self.paper else "LIVE",
+                    self.symbols, self.balance)
         last_status = 0.0
         try:
             while not self._stop_event.is_set():
+                self._sync_balance()  # LIVE only; keeps sizing on real equity
                 for trader in self.traders.values():
                     try:
                         self._poll_symbol(trader)
