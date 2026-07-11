@@ -122,12 +122,62 @@ def align_htf_to_ltf(ltf_timestamps: pd.Series, htf_regime: pd.DataFrame,
     return merged.sort_values("_order")[column_name].reset_index(drop=True)
 
 
-# ── Layer 1: regime agreement ────────────────────────────────────────────
+# ── Layer 1: 5-state regime ──────────────────────────────────────────────
+# 30m is the leading timeframe (it turns first); 1h is the confirming one.
+# Five mutually-exclusive, exhaustive states over the 3x3 (regime_30m,
+# regime_1h) grid:
+#
+#   regime_30m   regime_1h        layer1_regime
+#   UP           UP               BULL         (full agreement)
+#   UP           DOWN or NEUTRAL  EARLY_BULL   (30m leads, 1h not yet confirming --
+#                                                includes outright conflict, not just lag)
+#   DOWN         DOWN             SELL
+#   DOWN         UP or NEUTRAL    EARLY_SELL
+#   NEUTRAL      anything         NEUTRAL      (30m itself undecided -- nothing to lead)
+LAYER1_STATES = ("NEUTRAL", "EARLY_BULL", "BULL", "EARLY_SELL", "SELL")
+
+
+def classify_layer1(regime_30m: pd.Series, regime_1h: pd.Series) -> pd.DataFrame:
+    """Pure classification step: (regime_30m, regime_1h) -> 5-state Layer 1 read.
+
+    Exposed separately from `layer1_regime` so the state table itself can be
+    unit-tested directly against known UP/DOWN/NEUTRAL combinations, without
+    needing to reverse-engineer OHLCV data that produces a specific HMA slope.
+    """
+    regime_30m = pd.Series(regime_30m).reset_index(drop=True)
+    regime_1h = pd.Series(regime_1h).reset_index(drop=True)
+
+    is_30m_up = regime_30m == "UP"
+    is_30m_down = regime_30m == "DOWN"
+    is_1h_up = regime_1h == "UP"
+    is_1h_down = regime_1h == "DOWN"
+
+    bull = is_30m_up & is_1h_up
+    early_bull = is_30m_up & ~is_1h_up
+    sell = is_30m_down & is_1h_down
+    early_sell = is_30m_down & ~is_1h_down
+
+    layer1_regime_col = np.select(
+        [bull, early_bull, sell, early_sell],
+        ["BULL", "EARLY_BULL", "SELL", "EARLY_SELL"],
+        default="NEUTRAL",
+    )
+    out = pd.DataFrame({"layer1_regime": layer1_regime_col})
+    out["layer1_directional"] = out["layer1_regime"] != "NEUTRAL"
+    out["layer1_confirmed"] = out["layer1_regime"].isin(["BULL", "SELL"])
+    return out
+
+
 def layer1_regime(df_1h: pd.DataFrame, df_30m: pd.DataFrame) -> pd.DataFrame:
-    """Compute Layer 1 regime agreement on the 30m bar grid.
+    """Compute the Layer 1 5-state regime read on the 30m bar grid.
 
     Returns a DataFrame (one row per 30m bar) with columns:
-        timestamp, regime_1h, regime_30m, layer1_regime, layer1_pass
+        timestamp, regime_30m, regime_1h,
+        layer1_regime      -- one of LAYER1_STATES
+        layer1_directional -- True for any non-NEUTRAL state (BULL/EARLY_BULL/
+                               SELL/EARLY_SELL); False only for NEUTRAL
+        layer1_confirmed   -- True only for full agreement (BULL or SELL);
+                               False for the EARLY_* states and NEUTRAL
     """
     r1h = compute_tf_regime(df_1h)
     r30 = compute_tf_regime(df_30m)
@@ -137,10 +187,8 @@ def layer1_regime(df_1h: pd.DataFrame, df_30m: pd.DataFrame) -> pd.DataFrame:
     result["regime_1h"] = align_htf_to_ltf(result["timestamp"], r1h, "regime_1h")
     result["regime_1h"] = result["regime_1h"].fillna("NEUTRAL")
 
-    agree_up = (result["regime_1h"] == "UP") & (result["regime_30m"] == "UP")
-    agree_down = (result["regime_1h"] == "DOWN") & (result["regime_30m"] == "DOWN")
-    result["layer1_regime"] = np.select([agree_up, agree_down], ["UP", "DOWN"], default="NEUTRAL")
-    result["layer1_pass"] = agree_up | agree_down
+    classified = classify_layer1(result["regime_30m"], result["regime_1h"])
+    result[["layer1_regime", "layer1_directional", "layer1_confirmed"]] = classified
     return result
 
 
@@ -197,11 +245,12 @@ def main() -> int:
         return 1
 
     result = layer1_regime(df_1h, df_30m)
-    warm = result["regime_1h"].eq("NEUTRAL").sum()
-    n_pass = result["layer1_pass"].sum()
-    print(f"30m bars: {len(result)} | Layer1 PASS bars: {n_pass} ({n_pass/len(result):.1%}) "
-          f"| still-neutral 1h (warmup): {warm}")
-    print(result["layer1_regime"].value_counts().to_string())
+    n_confirmed = result["layer1_confirmed"].sum()
+    n_directional = result["layer1_directional"].sum()
+    print(f"30m bars: {len(result)} | directional (any lean): {n_directional} "
+          f"({n_directional/len(result):.1%}) | fully confirmed (BULL/SELL): "
+          f"{n_confirmed} ({n_confirmed/len(result):.1%})")
+    print(result["layer1_regime"].value_counts().reindex(LAYER1_STATES, fill_value=0).to_string())
     print("\nLast 15 rows:")
     print(result.tail(15).to_string(index=False))
     return 0

@@ -72,13 +72,35 @@ class Layer1RegimeTests(unittest.TestCase):
             with self.subTest(hour=i, half="second"):
                 self.assertEqual(aligned.iloc[idx2], r1h["regime"].iloc[i])
 
-    def test_layer1_pass_requires_agreement(self):
+    def test_classify_layer1_covers_all_nine_combinations(self):
+        """Direct table test of the 5-state classification over the full
+        3x3 (regime_30m, regime_1h) grid. 30m is the leading timeframe: an
+        EARLY_* state fires whenever 30m has a direction and 1h hasn't
+        confirmed it yet -- whether 1h is merely undecided (NEUTRAL) or
+        actively opposite -- matching the confirmed design (outright
+        conflict counts as "early", not NEUTRAL)."""
         module = load_layer1_regime()
-        agree_up = (pd.Series(["UP"]) == "UP") & (pd.Series(["UP"]) == "UP")
-        self.assertTrue(bool(agree_up.iloc[0]))
+        regime_30m = pd.Series(["UP", "UP", "UP", "DOWN", "DOWN", "DOWN", "NEUTRAL", "NEUTRAL", "NEUTRAL"])
+        regime_1h = pd.Series(["UP", "DOWN", "NEUTRAL", "DOWN", "UP", "NEUTRAL", "UP", "DOWN", "NEUTRAL"])
+        expected = ["BULL", "EARLY_BULL", "EARLY_BULL", "SELL", "EARLY_SELL", "EARLY_SELL", "NEUTRAL", "NEUTRAL", "NEUTRAL"]
+
+        result = module.classify_layer1(regime_30m, regime_1h)
+
+        self.assertEqual(list(result["layer1_regime"]), expected)
+        self.assertEqual(
+            list(result["layer1_confirmed"]),
+            [s in ("BULL", "SELL") for s in expected],
+        )
+        self.assertEqual(
+            list(result["layer1_directional"]),
+            [s != "NEUTRAL" for s in expected],
+        )
+
+    def test_layer1_regime_end_to_end_steady_uptrend(self):
+        module = load_layer1_regime()
 
         # End-to-end: construct 1h/30m data whose regimes are known to align
-        # on the tail and verify layer1_regime reports PASS there.
+        # on the tail and verify layer1_regime reports full BULL there.
         n_30m = 200
         step_30m = 1_800_000
         prices_30m = list(np.linspace(100, 200, n_30m))  # steady uptrend
@@ -97,8 +119,9 @@ class Layer1RegimeTests(unittest.TestCase):
 
         result = module.layer1_regime(df_1h, df_30m)
         tail = result.tail(20)
-        self.assertTrue((tail["layer1_regime"] == "UP").all())
-        self.assertTrue(tail["layer1_pass"].all())
+        self.assertTrue((tail["layer1_regime"] == "BULL").all())
+        self.assertTrue(tail["layer1_confirmed"].all())
+        self.assertTrue(tail["layer1_directional"].all())
 
 
 if __name__ == "__main__":
