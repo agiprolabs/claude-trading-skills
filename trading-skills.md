@@ -1,6 +1,6 @@
 # Trading Skills — Complete Catalog
 
-This document provides detailed descriptions of all 68 trading skills organized by category.
+This document provides detailed descriptions of all 69 trading skills organized by category.
 
 ---
 
@@ -99,6 +99,9 @@ Walk-forward validation framework for trading strategies and ML models. Rolling 
 
 ### tf30m-hma-ema-momentum
 30-minute trend-momentum strategy. HMA(20) direction gate + EMA(5)/EMA(9) cross trigger, with a 4-part confirmation score (ROC, RSI, ADX, Volume) requiring at least 3 of 4. ATR(14)-based stop/take-profit at 1:1 R:R, direction-signal early exits (HMA/EMA/ROC reverse), and a complete bar-by-bar state-machine engine with backtester.
+
+### layered-regime-momentum
+4-layer multi-timeframe system built incrementally. Layer 1 (implemented): 1h + 30m HMA(20) slope regime agreement with no-lookahead cross-timeframe alignment. Layers 2-4 (planned): context bias dynamic scoring (1h + 15m), regime-locked directional entry (structure/cross), and risk management (5% margin/trade, 2 positions max, 1:1.2 R:R with a split TP1/TP2 exit).
 
 ---
 
