@@ -205,11 +205,13 @@ reduce-only SL/TP params may need tuning for your account configuration.
 ```bash
 uv pip install pandas numpy ccxt aiohttp
 
-# Paper trade OKX BTC + ETH perpetuals on 30m (no keys required):
-SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT" python scripts/run_bot.py
+# Paper trade the BTC/ETH/SOL/XRP/XAU/XAG OKX watchlist on 30m (no keys required):
+SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT,SOL/USDT:USDT,XRP/USDT:USDT,XAU/USDT:USDT,XAG/USDT:USDT" \
+    python scripts/run_bot.py
 
 # Same, but on 15m bars:
-TIMEFRAME=15m SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT" python scripts/run_bot.py
+TIMEFRAME=15m SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT,SOL/USDT:USDT,XRP/USDT:USDT,XAU/USDT:USDT,XAG/USDT:USDT" \
+    python scripts/run_bot.py
 
 # Offline: replay a CSV bar-by-bar through the full bot pipeline:
 python scripts/run_bot.py --replay candles_30m.csv --symbol BTC/USDT:USDT
