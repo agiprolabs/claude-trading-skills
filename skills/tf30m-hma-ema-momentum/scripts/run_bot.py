@@ -157,6 +157,7 @@ class SymbolTrader:
     losses: int = 0
     net_pnl: float = 0.0
     market_state: str = "live"
+    trade_log: list = field(default_factory=list)  # structured records, appended in _exit()
     _log: deque = field(default_factory=lambda: deque(maxlen=40))
 
     def log(self, msg: str) -> None:
@@ -422,7 +423,8 @@ class TF30MBot:
         trader.log(f"ENTER {direction} @ {entry:.4f}  SL={sl:.4f} TP={tp:.4f} amt={amount:.6f}")
         self.notifier.notify_buy(symbol, entry, amount, sl, tp, self.strategy_tag)
 
-    def _exit(self, trader: SymbolTrader, exit_price: float, reason: str) -> None:
+    def _exit(self, trader: SymbolTrader, exit_price: float, reason: str,
+              exit_ts: Optional[int] = None) -> None:
         ct = trader.current_trade
         if not ct:
             return
@@ -458,6 +460,23 @@ class TF30MBot:
 
         self.risk.close_position(trader.symbol, self.strategy_tag)
         trader.position_open = False
+        trader.trade_log.append({
+            "symbol": trader.symbol,
+            "direction": direction,
+            "entry_ts": ct.get("opened_ts"),
+            "exit_ts": exit_ts,
+            "entry_price": entry,
+            "exit_price": exit_price,
+            "sl": ct.get("sl"),
+            "tp": ct.get("tp1"),
+            "reason": reason,
+            "notional": notional,
+            "leverage": self.leverage,
+            "pnl": pnl,
+            "pnl_pct": pnl_pct,
+            "balance_after": self.balance,
+            "snapshot": ct.get("snapshot", {}),
+        })
         trader.log(f"EXIT {direction} @ {exit_price:.4f} [{reason}] pnl={pnl:+.2f} "
                    f"({pnl_pct:+.2%}) bal={self.balance:.2f}")
         stats = {"win_rate": (trader.wins / trader.trades * 100) if trader.trades else 0.0,
@@ -513,7 +532,7 @@ class TF30MBot:
             self.exchange.cancel_all_orders(trader.symbol)
         except Exception:  # noqa: BLE001
             pass
-        self._exit(trader, float(exit_px), reason)
+        self._exit(trader, float(exit_px), reason, exit_ts=int(row["timestamp"]))
         return True
 
     def process_bar(self, trader: SymbolTrader, ind: pd.DataFrame, i: int) -> None:
@@ -528,7 +547,7 @@ class TF30MBot:
                 hit = self._paper_stop_tp(trader, row)
                 if hit:
                     exit_px, reason = hit
-                    self._exit(trader, exit_px, reason)
+                    self._exit(trader, exit_px, reason, exit_ts=int(row["timestamp"]))
                     trader.sm.on_position_closed()
                     return
             else:
@@ -539,7 +558,7 @@ class TF30MBot:
         # 2) State machine drives exit / entry decisions.
         decision = trader.sm.step(row)
         if decision.action in (Action.EXIT_LONG, Action.EXIT_SHORT):
-            self._exit(trader, float(row["close"]), decision.reason)
+            self._exit(trader, float(row["close"]), decision.reason, exit_ts=int(row["timestamp"]))
         elif decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
             # Stash score/components so the entry snapshot records them.
             r = row.copy()
