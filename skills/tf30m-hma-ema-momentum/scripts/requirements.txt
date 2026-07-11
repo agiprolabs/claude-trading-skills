@@ -1,0 +1,7 @@
+# Backtester (tf30m_hma_ema_strategy.py)
+pandas>=1.5
+numpy>=1.23
+
+# Live / paper bot (run_bot.py) — additionally requires:
+ccxt>=4.0
+aiohttp>=3.8

@@ -1,6 +1,6 @@
 ---
 name: tf30m-hma-ema-momentum
-description: 30-minute HMA20 gate + EMA5/EMA9 cross momentum strategy with a 4-part confirmation score (ROC, RSI, ADX, Volume), ATR stop/take-profit at 1:1 R:R, and direction-signal early exits. Includes a full state-machine engine and backtester.
+description: 30-minute HMA20 gate + EMA5/EMA9 cross momentum strategy with a 4-part confirmation score (ROC, RSI, ADX, Volume), ATR stop/take-profit at 1:1 R:R, and direction-signal early exits. Includes a shared state-machine engine, a backtester, and a live/paper trading bot (ccxt/OKX futures + RiskManager + Telegram).
 ---
 
 # TF30M HMA20-EMA Cross Momentum
@@ -143,15 +143,71 @@ advance the active confirmation window.
 See `references/strategy_spec.md` for the complete rule set, failure
 conditions, and annotated pseudocode.
 
+The signal state machine lives in one place — `TF30MStateMachine` — and both
+the backtester and the live bot drive it, so live behaviour cannot diverge
+from backtest behaviour.
+
+---
+
+## Live / Paper Trading Bot
+
+`scripts/run_bot.py` runs the strategy against a live exchange feed:
+
+```
+ccxt (OKX futures) → TF30MStateMachine → RiskManager → TelegramNotifier
+   market data          entry/exit          sizing & guards    alerts + commands
+```
+
+- **Data/execution**: ccxt, default exchange `okx`, USDT perpetuals
+  (`BTC/USDT:USDT`) — supports both **long and short**.
+- **Risk**: `RiskManager` handles position sizing (5% notional), the
+  1-position-per-symbol limit, and a max-drawdown halt (default 15%, with
+  auto-recovery). ATR(14)×1.5 stop/take-profit (1:1) are passed explicitly,
+  overriding the module's percentage defaults so the bot matches the TF30M spec.
+- **Alerts/commands**: `TelegramNotifier` sends entry/exit/halt alerts and
+  serves `/stats`, `/status`, `/positions`, `/log`, `/stop`.
+- **PAPER by default** — fills are simulated against each closed bar's
+  high/low and balance is tracked internally. Set `PAPER=false` (plus OKX
+  keys) only after testing.
+
+⚠️ **LIVE mode places real orders.** Verify order placement on OKX (position
+mode, margin mode, contract size) on a small size or testnet first — the
+reduce-only SL/TP params may need tuning for your account configuration.
+
+```bash
+uv pip install pandas numpy ccxt aiohttp
+
+# Paper trade OKX BTC + ETH perpetuals (no keys required):
+SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT" python scripts/run_bot.py
+
+# Offline: replay a CSV bar-by-bar through the full bot pipeline:
+python scripts/run_bot.py --replay candles_30m.csv --symbol BTC/USDT:USDT
+
+# Live (real orders — requires keys + explicit opt-in):
+PAPER=false OKX_API_KEY=... OKX_API_SECRET=... OKX_API_PASSWORD=... \
+    SYMBOLS="BTC/USDT:USDT" python scripts/run_bot.py
+```
+
+Key environment variables (see the header of `run_bot.py` for the full list):
+`EXCHANGE_ID`, `SYMBOLS`, `PAPER`, `BALANCE`, `LEVERAGE`, `MARGIN_FRACTION`,
+`MARGIN_MODE`, `MAX_DRAWDOWN_PCT`, `POLL_SECONDS`, `OKX_API_KEY` /
+`OKX_API_SECRET` / `OKX_API_PASSWORD`, `TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID`.
+
 ---
 
 ## Files
 
 ### Scripts
 - `scripts/tf30m_hma_ema_strategy.py` — indicators (HMA, EMA, ROC, RSI, ADX,
-  ATR, volume SMA), the `StrategyEngine` state machine, a bar-by-bar
-  backtester, and a CLI. Run `--demo` for synthetic data or `--csv` for your
-  own 30m OHLCV.
+  ATR, volume SMA), `TF30MStateMachine` (pure signal logic), the
+  `StrategyEngine` backtester, and a CLI. Run `--demo` for synthetic data or
+  `--csv` for your own 30m OHLCV.
+- `scripts/run_bot.py` — live/paper bot: ccxt (OKX futures) data + execution,
+  wired to `RiskManager` and `TelegramNotifier`. `--replay` runs the whole
+  pipeline offline against a CSV.
+- `scripts/risk_manager.py` — position sizing, SL/TP, position limits, and the
+  drawdown-halt guard.
+- `scripts/telegram_notifier.py` — Telegram alerts and command handler.
 
 ### References
 - `references/strategy_spec.md` — full specification: gates, triggers,
@@ -163,13 +219,17 @@ conditions, and annotated pseudocode.
 ## Quick Start
 
 ```bash
-uv pip install pandas numpy
+uv pip install pandas numpy          # backtester only
+uv pip install pandas numpy ccxt aiohttp   # + live/paper bot
 
 # Synthetic demo (mechanics + summary stats)
 python scripts/tf30m_hma_ema_strategy.py --demo
 
 # Your own 30m candles: CSV with open,high,low,close,volume (ascending time)
 python scripts/tf30m_hma_ema_strategy.py --csv candles_30m.csv --balance 10000
+
+# Paper-trade live on OKX (no keys needed)
+SYMBOLS="BTC/USDT:USDT" python scripts/run_bot.py
 ```
 
 Programmatic use:

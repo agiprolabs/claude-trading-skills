@@ -223,20 +223,156 @@ def _snapshot(direction: str, row: pd.Series, score: int, comps: dict) -> dict:
     }
 
 
-class StrategyEngine:
-    """Bar-by-bar executor mirroring the strategy pseudocode.
+class Action(str, Enum):
+    NONE = "NONE"
+    ENTER_LONG = "ENTER_LONG"
+    ENTER_SHORT = "ENTER_SHORT"
+    EXIT_LONG = "EXIT_LONG"
+    EXIT_SHORT = "EXIT_SHORT"
 
-    The intrabar Stop Loss / Take Profit checks run against each bar's
-    high/low (exchange orders are always live). Signal exits and entries are
-    evaluated on bar close.
+
+@dataclass
+class Decision:
+    """One signal decision for a single closed bar."""
+    action: Action = Action.NONE
+    reason: str = ""                       # "SIGNAL" for signal exits
+    score: int = 0
+    components: dict = field(default_factory=dict)
+
+
+class TF30MStateMachine:
+    """Pure signal state machine — the single source of truth for the strategy.
+
+    It owns only the WAITING / CONFIRMATION / POSITION state and the
+    confirmation-bar counter. It does **not** track P&L, size positions, or
+    execute orders — it just returns a `Decision` per closed bar. Stop-loss and
+    take-profit are handled by the caller (they are "always live" on the
+    exchange); when SL/TP closes a position externally, the caller must call
+    `on_position_closed()` so the machine returns to WAITING.
+
+    Both the backtester (`StrategyEngine`) and the live bot (`run_bot.py`) drive
+    this same class so their entry/exit logic can never diverge.
+    """
+
+    def __init__(self) -> None:
+        self.state = State.WAITING
+        self.confirmation_bar = 0
+
+    def reset(self) -> None:
+        self.state = State.WAITING
+        self.confirmation_bar = 0
+
+    # Called by the caller when SL/TP (or any external close) ends the trade.
+    on_position_closed = reset
+
+    @staticmethod
+    def is_warm(row: pd.Series) -> bool:
+        return not (
+            pd.isna(row["hma20"])
+            or pd.isna(row["hma20_prev"])
+            or pd.isna(row["adx14_prev"])
+        )
+
+    def step(self, row: pd.Series) -> Decision:
+        """Advance the machine one closed bar and return the resulting action.
+
+        Mirrors the pseudocode exactly, minus the intrabar SL/TP block which the
+        caller runs *before* calling `step` (and then skips the bar on a fill).
+        """
+        if not self.is_warm(row):
+            return Decision(Action.NONE)
+
+        open_, close = float(row["open"]), float(row["close"])
+        hma20, hma20_prev = float(row["hma20"]), float(row["hma20_prev"])
+        ema5, ema9 = float(row["ema5"]), float(row["ema9"])
+        roc9 = float(row["roc9"])
+        cross_up, cross_down = bool(row["ema_cross_up"]), bool(row["ema_cross_down"])
+
+        # Manage open LONG (signal exit on bar close). No immediate reversal:
+        # `step` returns here, so no new entry is evaluated on the same bar.
+        if self.state == State.LONG_POSITION:
+            if close < hma20 or cross_down or roc9 < 0:
+                self.reset()
+                return Decision(Action.EXIT_LONG, reason="SIGNAL")
+            return Decision(Action.NONE)
+
+        if self.state == State.SHORT_POSITION:
+            if close > hma20 or cross_up or roc9 > 0:
+                self.reset()
+                return Decision(Action.EXIT_SHORT, reason="SIGNAL")
+            return Decision(Action.NONE)
+
+        # START LONG SETUP
+        if self.state == State.WAITING:
+            long_gate = open_ > hma20 and hma20 >= hma20_prev
+            if long_gate and cross_up:
+                self.state = State.LONG_CONFIRMATION
+                self.confirmation_bar = 1
+                return Decision(Action.NONE)
+            # START SHORT SETUP
+            short_gate = open_ < hma20 and hma20 <= hma20_prev
+            if short_gate and cross_down:
+                self.state = State.SHORT_CONFIRMATION
+                self.confirmation_bar = 1
+                return Decision(Action.NONE)
+            return Decision(Action.NONE)
+
+        # PROCESS LONG CONFIRMATION
+        if self.state == State.LONG_CONFIRMATION:
+            if open_ <= hma20 or hma20 < hma20_prev or ema5 <= ema9 or cross_down:
+                self.reset()
+                return Decision(Action.NONE)
+            score, comps = _long_score(row)
+            if score >= MIN_SCORE:
+                self.state = State.LONG_POSITION
+                self.confirmation_bar = 0
+                return Decision(Action.ENTER_LONG, score=score, components=comps)
+            if self.confirmation_bar >= CONFIRMATION_BARS:
+                self.reset()
+                return Decision(Action.NONE)
+            self.confirmation_bar += 1
+            return Decision(Action.NONE)
+
+        # PROCESS SHORT CONFIRMATION
+        if self.state == State.SHORT_CONFIRMATION:
+            if open_ >= hma20 or hma20 > hma20_prev or ema5 >= ema9 or cross_up:
+                self.reset()
+                return Decision(Action.NONE)
+            score, comps = _short_score(row)
+            if score >= MIN_SCORE:
+                self.state = State.SHORT_POSITION
+                self.confirmation_bar = 0
+                return Decision(Action.ENTER_SHORT, score=score, components=comps)
+            if self.confirmation_bar >= CONFIRMATION_BARS:
+                self.reset()
+                return Decision(Action.NONE)
+            self.confirmation_bar += 1
+            return Decision(Action.NONE)
+
+        return Decision(Action.NONE)
+
+
+class StrategyEngine:
+    """Bar-by-bar backtest executor built on `TF30MStateMachine`.
+
+    The state machine produces signals; this class layers paper execution on
+    top: intrabar Stop Loss / Take Profit against each bar's high/low, entries
+    and signal exits at bar close, and P&L on a 5%-of-balance notional.
     """
 
     def __init__(self, balance: float = 10_000.0) -> None:
         self.balance = balance
-        self.state = State.WAITING
-        self.confirmation_bar = 0
+        self.sm = TF30MStateMachine()
         self.position: Optional[Position] = None
         self.trades: list[Trade] = []
+
+    @property
+    def state(self) -> State:
+        return self.sm.state
+
+    @property
+    def confirmation_bar(self) -> int:
+        return self.sm.confirmation_bar
 
     # -- exits ------------------------------------------------------
     def _close(self, i: int, exit_price: float, reason: str) -> None:
@@ -290,11 +426,11 @@ class StrategyEngine:
     # -- entries ----------------------------------------------------
     def _open(self, direction: str, i: int, row: pd.Series, score: int, comps: dict) -> None:
         entry = float(row["close"])
-        dist = float(row["atr14"]) * ATR_STOP_MULT
+        atr = float(row["atr14"])
         if direction == "LONG":
-            sl, tp = entry - dist, entry + ATR_TP_MULT * float(row["atr14"])
+            sl, tp = entry - atr * ATR_STOP_MULT, entry + atr * ATR_TP_MULT
         else:
-            sl, tp = entry + dist, entry - ATR_TP_MULT * float(row["atr14"])
+            sl, tp = entry + atr * ATR_STOP_MULT, entry - atr * ATR_TP_MULT
         self.position = Position(
             direction=direction,
             entry_index=i,
@@ -304,103 +440,27 @@ class StrategyEngine:
             margin=self.balance * MARGIN_FRACTION,
             snapshot=_snapshot(direction, row, score, comps),
         )
-        self.state = State.LONG_POSITION if direction == "LONG" else State.SHORT_POSITION
-        self.confirmation_bar = 0
-
-    def _reset(self) -> None:
-        self.state = State.WAITING
-        self.confirmation_bar = 0
 
     # -- per-bar driver ---------------------------------------------
     def on_bar(self, i: int, row: pd.Series) -> None:
-        # Indicators must be warm.
-        if pd.isna(row["hma20"]) or pd.isna(row["hma20_prev"]) or pd.isna(row["adx14_prev"]):
+        if not TF30MStateMachine.is_warm(row):
             return
-
-        block_new_entry = False
 
         # 1) Intrabar stop / take-profit have top priority while in a trade.
-        if self.position is not None:
-            if self._check_stop_tp(i, row):
-                self._reset()
-                # SL/TP already executed -> do not also fire a signal exit.
-                return
-
-        open_, close = float(row["open"]), float(row["close"])
-        hma20, hma20_prev = float(row["hma20"]), float(row["hma20_prev"])
-        ema5, ema9 = float(row["ema5"]), float(row["ema9"])
-        roc9 = float(row["roc9"])
-        cross_up, cross_down = bool(row["ema_cross_up"]), bool(row["ema_cross_down"])
-
-        # 2) Manage open LONG (signal exit on bar close).
-        if self.position is not None and self.position.direction == "LONG":
-            if close < hma20 or cross_down or roc9 < 0:
-                self._close(i, close, "SIGNAL")
-                self._reset()
-                block_new_entry = True  # no immediate reversal this bar
-                # fall through to entry guards, which the block flag stops
-            else:
-                return
-
-        # 3) Manage open SHORT (signal exit on bar close).
-        if self.position is not None and self.position.direction == "SHORT":
-            if close > hma20 or cross_up or roc9 > 0:
-                self._close(i, close, "SIGNAL")
-                self._reset()
-                block_new_entry = True
-            else:
-                return
-
-        if self.position is not None:
-            return
-        if block_new_entry:
+        # If filled, tell the state machine and skip the bar (no signal exit,
+        # no new entry) -- mirrors the pseudocode's early return.
+        if self.position is not None and self._check_stop_tp(i, row):
+            self.sm.on_position_closed()
             return
 
-        # 4) START LONG SETUP
-        if self.state == State.WAITING:
-            long_gate = open_ > hma20 and hma20 >= hma20_prev
-            if long_gate and cross_up:
-                self.state = State.LONG_CONFIRMATION
-                self.confirmation_bar = 1
-                return
-
-        # 5) START SHORT SETUP
-        if self.state == State.WAITING:
-            short_gate = open_ < hma20 and hma20 <= hma20_prev
-            if short_gate and cross_down:
-                self.state = State.SHORT_CONFIRMATION
-                self.confirmation_bar = 1
-                return
-
-        # 6) PROCESS LONG CONFIRMATION
-        if self.state == State.LONG_CONFIRMATION:
-            if open_ <= hma20 or hma20 < hma20_prev or ema5 <= ema9 or cross_down:
-                self._reset()
-                return
-            score, comps = _long_score(row)
-            if score >= MIN_SCORE:
-                self._open("LONG", i, row, score, comps)
-                return
-            if self.confirmation_bar >= CONFIRMATION_BARS:
-                self._reset()
-                return
-            self.confirmation_bar += 1
-            return
-
-        # 7) PROCESS SHORT CONFIRMATION
-        if self.state == State.SHORT_CONFIRMATION:
-            if open_ >= hma20 or hma20 > hma20_prev or ema5 >= ema9 or cross_up:
-                self._reset()
-                return
-            score, comps = _short_score(row)
-            if score >= MIN_SCORE:
-                self._open("SHORT", i, row, score, comps)
-                return
-            if self.confirmation_bar >= CONFIRMATION_BARS:
-                self._reset()
-                return
-            self.confirmation_bar += 1
-            return
+        # 2) Signal state machine decides the rest (exit / entry / nothing).
+        decision = self.sm.step(row)
+        if decision.action in (Action.EXIT_LONG, Action.EXIT_SHORT):
+            self._close(i, float(row["close"]), decision.reason)
+        elif decision.action == Action.ENTER_LONG:
+            self._open("LONG", i, row, decision.score, decision.components)
+        elif decision.action == Action.ENTER_SHORT:
+            self._open("SHORT", i, row, decision.score, decision.components)
 
 
 # ── Backtest driver ─────────────────────────────────────────────────
