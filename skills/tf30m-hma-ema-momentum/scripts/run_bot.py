@@ -30,7 +30,7 @@ Usage:
 
 Configuration (environment variables) -- all optional, sensible defaults below:
     EXCHANGE_ID        ccxt exchange id           (default: okx)
-    TIMEFRAME          ccxt bar size, e.g. 15m/30m/1h  (default: 30m)
+    TIMEFRAME          ccxt bar size, e.g. 15m/30m/1h  (default: 15m)
     SYMBOLS            comma-separated symbols     (default: BTC/ETH/SOL/XRP/
                                                      XAU/XAG USDT perpetuals,
                                                      see DEFAULT_SYMBOLS below)
@@ -49,13 +49,15 @@ Configuration (environment variables) -- all optional, sensible defaults below:
     TELEGRAM_TOKEN / TELEGRAM_CHAT_ID                 optional alerts
 
 Timeframe:
-    Set TIMEFRAME to any ccxt-supported bar size (this strategy was designed
-    for 30m; 15m is also supported). Indicator periods (HMA20, EMA5/9, ROC9,
-    RSI14, ADX14, ATR14, Volume SMA20) are bar counts and are used unchanged
-    on any timeframe -- on 15m they cover half the wall-clock lookback of 30m,
-    so expect more (and noisier) signals. Run one timeframe per deployment;
-    the state machine, RiskManager keys, and Telegram labels are all tagged
-    with the configured TIMEFRAME so logs/positions stay unambiguous.
+    Defaults to 15m (backtested on 6 months of BTC/ETH/SOL/XRP/XAU/XAG data;
+    30m is also supported but only had complete historical coverage for 2 of
+    those 6 symbols, so 15m is the validated default). Indicator periods
+    (HMA20, EMA5/9, ROC9, RSI14, ADX14, ATR14, Volume SMA20) are bar counts
+    and are used unchanged on any timeframe -- on 15m they cover half the
+    wall-clock lookback of 30m, so expect more (and noisier) signals. Run one
+    timeframe per deployment; the state machine, RiskManager keys, and
+    Telegram labels are all tagged with the configured TIMEFRAME so
+    logs/positions stay unambiguous.
 
 Leverage and position size:
     notional_per_trade = balance * MARGIN_FRACTION * LEVERAGE
@@ -193,7 +195,7 @@ class SymbolTrader:
 class TF30MBot:
     def __init__(self) -> None:
         self.exchange_id = os.getenv("EXCHANGE_ID", "okx")
-        self.timeframe = os.getenv("TIMEFRAME", "30m")
+        self.timeframe = os.getenv("TIMEFRAME", "15m")
         self.bar_minutes = _timeframe_minutes(self.timeframe)
         # Bookkeeping tag for RiskManager position keys and Telegram labels --
         # reflects the configured timeframe so /stats and logs aren't

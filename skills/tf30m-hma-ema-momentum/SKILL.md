@@ -162,15 +162,17 @@ ccxt (OKX futures) → TF30MStateMachine → RiskManager → TelegramNotifier
   supports both **long and short**. Default watchlist: `BTC/USDT:USDT`,
   `ETH/USDT:USDT`, `SOL/USDT:USDT`, `XRP/USDT:USDT`, `XAU/USDT:USDT` (gold),
   `XAG/USDT:USDT` (silver); override with `SYMBOLS`.
-- **Timeframe**: `TIMEFRAME` selects the ccxt bar size — designed for `30m`,
-  `15m` is also supported. Indicator periods (HMA20, EMA5/9, ROC9, RSI14,
-  ADX14, ATR14, Volume SMA20) are bar counts, not durations, so they're reused
-  unchanged on 15m — that halves the wall-clock lookback of 30m, so expect
-  more (and noisier) signals. Run **one timeframe per deployment** (pick 30m
-  or 15m); the state machine, `RiskManager` position keys, and Telegram labels
-  are all tagged with the configured timeframe (e.g. `hma_ema_15m`) so logs
-  and `/positions` stay unambiguous if you run separate 30m and 15m
-  deployments side by side.
+- **Timeframe**: `TIMEFRAME` selects the ccxt bar size — **defaults to `15m`**.
+  30m is also supported, but a 6-month backtest across the default watchlist
+  found complete historical 30m coverage for only 2 of the 6 symbols (BTC and
+  XAU), so 15m is the validated default; see `references/backtest_notes.md`.
+  Indicator periods (HMA20, EMA5/9, ROC9, RSI14, ADX14, ATR14, Volume SMA20)
+  are bar counts, not durations, so they're reused unchanged on 15m — that
+  halves the wall-clock lookback of 30m, so expect more (and noisier)
+  signals. Run **one timeframe per deployment**; the state machine,
+  `RiskManager` position keys, and Telegram labels are all tagged with the
+  configured timeframe (e.g. `hma_ema_15m`) so logs and `/positions` stay
+  unambiguous if you run separate 30m and 15m deployments side by side.
 - **Risk**: `RiskManager` sizes the margin (`MARGIN_FRACTION` × balance,
   default 5%); `run_bot.py` then scales that into the actual traded notional
   by `LEVERAGE` (`notional = balance × MARGIN_FRACTION × LEVERAGE`), same as a
@@ -212,11 +214,11 @@ reduce-only SL/TP params may need tuning for your account configuration.
 ```bash
 uv pip install pandas numpy ccxt aiohttp
 
-# Paper trade the default watchlist (BTC/ETH/SOL/XRP/XAU/XAG) on 30m, no keys required:
+# Paper trade the default watchlist (BTC/ETH/SOL/XRP/XAU/XAG) on 15m, no keys required:
 python scripts/run_bot.py
 
-# Same, but on 15m bars:
-TIMEFRAME=15m python scripts/run_bot.py
+# Same, but on 30m bars:
+TIMEFRAME=30m python scripts/run_bot.py
 
 # Override the watchlist:
 SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT" python scripts/run_bot.py
@@ -232,7 +234,7 @@ PAPER=false OKX_API_KEY=... OKX_API_SECRET=... OKX_API_PASSWORD=... \
 
 All configuration is optional with defaults baked into `run_bot.py` — a bare
 `python scripts/run_bot.py` with no environment variables at all runs PAPER
-mode on the default watchlist (BTC/ETH/SOL/XRP/XAU/XAG), `TIMEFRAME=30m`,
+mode on the default watchlist (BTC/ETH/SOL/XRP/XAU/XAG), `TIMEFRAME=15m`,
 `LEVERAGE=20`, `MAX_OPEN_POSITIONS=2`. For a Railway deploy, that means you
 only need to set 5 variables — `OKX_API_KEY`, `OKX_API_SECRET`,
 `OKX_API_PASSWORD`, `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` — everything else is
@@ -253,7 +255,7 @@ needed — it's a background loop, not a web server):
    (`python scripts/run_bot.py`) — no need to set it manually. `Procfile` is
    included too as a fallback if you switch builders.
 4. **Variables tab**: every other setting already has a matching default in
-   `run_bot.py` (watchlist BTC/ETH/SOL/XRP/XAU/XAG, `TIMEFRAME=30m`,
+   `run_bot.py` (watchlist BTC/ETH/SOL/XRP/XAU/XAG, `TIMEFRAME=15m`,
    `LEVERAGE=20`, `MAX_OPEN_POSITIONS=2`, `PAPER=true`, ...) — you only need
    to set 5 variables:
    `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSWORD`, `TELEGRAM_TOKEN`,
@@ -309,6 +311,10 @@ only once you're comfortable with the drawdown behavior in paper mode.
 - `references/strategy_spec.md` — full specification: gates, triggers,
   confirmation scoring, entry/exit logic, setup-failure rules, indicator
   classification, entry snapshot, and state-machine pseudocode.
+- `references/backtest_notes.md` — findings from a real 6-month, 6-symbol
+  portfolio backtest: why `TIMEFRAME` defaults to 15m, the drawdown-halt
+  one-way-lock bug, and a data-driven breakdown of why win rate came out low
+  (exit-reason mix, direction asymmetry, confirmation-score predictiveness).
 
 ---
 
