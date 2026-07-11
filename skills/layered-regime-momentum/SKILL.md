@@ -1,6 +1,6 @@
 ---
 name: layered-regime-momentum
-description: Multi-timeframe layered trading system built incrementally — Layer 1 (1h+30m HMA20-slope regime read, 5 states: NEUTRAL/EARLY_BULL/BULL/EARLY_SELL/SELL) and Layer 2 (1h+15m dynamic bias scoring on ROC/RSI/ADX/Volume, with a stricter pass threshold for early vs confirmed regimes) are implemented; Layer 3 (regime-locked entry) and Layer 4 (risk management with split TP1/TP2) are planned. Standalone sibling to tf30m-hma-ema-momentum, not a replacement.
+description: Multi-timeframe layered trading system built incrementally — Layer 1 (1h+30m HMA20-slope regime read, 5 states), Layer 2 (1h+15m dynamic bias scoring on ROC/RSI/ADX/Volume, stricter threshold for early vs confirmed regimes), and Layer 3 (regime-locked directional entry via 15m break-of-structure) are implemented; Layer 4 (risk management with split TP1/TP2) is planned. Standalone sibling to tf30m-hma-ema-momentum, not a replacement.
 ---
 
 # Layered Regime Momentum
@@ -13,7 +13,7 @@ unclear regime.
 ```
 Layer 1  Regime agreement       1h + 30m HMA20 slope -> 5 states (NEUTRAL/EARLY_*/BULL/SELL)
 Layer 2  Context bias           1h + 15m dynamic scoring, confirms Layer 1
-Layer 3  Directional entry      regime-locked (uptrend -> long only), structure/cross
+Layer 3  Directional entry      regime-locked (uptrend -> long only), break of structure
 Layer 4  Risk management        5% margin/trade, 2 positions max, 1:1.2 R:R, split TP
 ```
 
@@ -27,7 +27,7 @@ compared side by side.
 |---|---|---|
 | 1. Regime agreement | ✅ Implemented, tested | `scripts/layer1_regime.py` |
 | 2. Context bias / dynamic scoring | ✅ Implemented, tested | `scripts/layer2_bias.py` |
-| 3. Directional entry | ⏳ Not started | — |
+| 3. Directional entry | ✅ Implemented, tested | `scripts/layer3_entry.py` |
 | 4. Risk management | ⏳ Not started | — |
 
 ---
@@ -182,15 +182,64 @@ threshold split by Layer 1 state is doing real work, not just decorative.
 
 ---
 
-## Layers 3–4 (planned)
+## Layer 3 — Directional Entry (structure break, 15m)
 
-- **Layer 3 — Directional entry**: trades *only* in the Layer 1/2 direction
-  (an uptrend permits long entries only, never short); entry trigger via
-  market structure and/or a fast/slow cross indicator.
-- **Layer 4 — Risk management**: 5% of balance margin per position, max 2
-  concurrent positions, no second position on a symbol already holding one,
-  R:R 1:1.2 with stops at ATR(14)×1.5 (1R), split exit — 50% of size at TP1
-  (0.5R), remaining 50% at TP2 (1.2R).
+**Rule**: Layer 1 + Layer 2 together already say "trade this direction now,
+or not at all" — Layer 3 never has to make its own direction call, only find
+*where* to enter within whatever direction `layer2_pass` currently permits,
+using **market structure** on the 15m grid (the same grid Layer 2 outputs on,
+so no further cross-timeframe alignment is needed):
+
+- **Swing detection**: a bar is a confirmed swing high once `swing_lookback`
+  bars (default 3) have closed *after* it with none of them, nor the
+  `swing_lookback` bars before it, showing a higher high. Swing lows mirror
+  this. Confirmation is always `swing_lookback` bars late by construction —
+  there's no way to know a bar was a local peak until enough subsequent price
+  action has ruled out a higher one (same close-time discipline as Layer 1's
+  alignment: nothing is used before it could actually be known).
+- **Break of structure (BOS)**: a fresh close above the last *confirmed*
+  swing high fires a long trigger; a fresh close below the last confirmed
+  swing low fires a short trigger. Each break is a **one-shot signal** — once
+  consumed, that level won't refire on later bars that also close above it;
+  a new swing point has to form first.
+- **Regime lock**: `LONG` only fires when `layer2_direction == "BULL"` **and**
+  `layer2_pass` **and** a fresh `bos_up` land on the same bar; `SHORT`
+  mirrors this for `SELL`/`bos_down`. Going long during a permitted downtrend
+  (or short during a permitted uptrend) is **structurally impossible**, not
+  just discouraged — there is no code path that produces it (verified by
+  test and by scanning the full real-BTC-data run below for exactly zero
+  such cases).
+
+### Usage
+
+```bash
+python scripts/layer3_entry.py --demo
+python scripts/layer3_entry.py --csv-1h btc_1h.csv --csv-30m btc_30m.csv --csv-15m btc_15m.csv
+```
+
+```python
+from layer3_entry import layer3_entry
+result = layer3_entry(df_1h, df_30m, df_15m)  # one row per 15m bar
+# columns: everything from layer2_bias, plus last_swing_high, last_swing_low,
+#          bos_up, bos_down, layer3_entry ('LONG'/'SHORT'/None)
+latest = result.iloc[-1]
+if latest.layer3_entry:
+    print(f"{latest.layer3_entry} entry signal at {latest.timestamp}")
+```
+
+Real-data check (BTC, 6 months, 15m): 186 LONG + 221 SHORT signals over
+17,376 bars (roughly 2 signals/day) — a scan of every signal confirms zero
+cross-contamination (no LONG while `layer2_direction == "SELL"` or vice
+versa), matching the "structurally impossible" design goal exactly.
+
+---
+
+## Layer 4 (planned)
+
+- **Risk management**: 5% of balance margin per position, max 2 concurrent
+  positions, no second position on a symbol already holding one, R:R 1:1.2
+  with stops at ATR(14)×1.5 (1R), split exit — 50% of size at TP1 (0.5R),
+  remaining 50% at TP2 (1.2R).
 
 ---
 
@@ -207,6 +256,11 @@ threshold split by Layer 1 state is doing real work, not just decorative.
   pass threshold. Imports `layer1_regime.py` (sibling script) for the Layer 1
   read and its no-lookahead alignment helper. CLI with `--demo` and
   `--csv-1h`/`--csv-30m`/`--csv-15m`.
+- `scripts/layer3_entry.py` — fractal swing-high/low detection, one-shot
+  break-of-structure triggers, and the regime lock that makes LONG
+  structurally impossible during a permitted downtrend (and vice versa).
+  Imports `layer2_bias.py` (sibling script). CLI with `--demo` and
+  `--csv-1h`/`--csv-30m`/`--csv-15m`.
 
 ### Tests
 - `tests/test_layer1_regime.py` (repo root) — warmup-neutral behavior, the
@@ -217,6 +271,11 @@ threshold split by Layer 1 state is doing real work, not just decorative.
   the BULL/SELL mirroring test for directional scoring, the
   confirmed-vs-early threshold split, a NEUTRAL-never-passes check, and an
   end-to-end accelerating-uptrend check.
+- `tests/test_layer3_entry.py` (repo root) — swing-confirmation timing
+  (a swing high must not appear before enough future bars exist to confirm
+  it), the one-shot break-of-structure property, the regime lock (LONG only
+  with BULL direction + layer2_pass, and vice versa), and a check that a
+  break with the wrong bias strength produces no entry.
 
 *This skill provides analytical tools and information only. It does not
 constitute financial advice or trading recommendations.*

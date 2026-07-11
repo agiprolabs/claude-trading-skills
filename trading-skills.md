@@ -101,7 +101,7 @@ Walk-forward validation framework for trading strategies and ML models. Rolling 
 30-minute trend-momentum strategy. HMA(20) direction gate + EMA(5)/EMA(9) cross trigger, with a 4-part confirmation score (ROC, RSI, ADX, Volume) requiring at least 3 of 4. ATR(14)-based stop/take-profit at 1:1 R:R, direction-signal early exits (HMA/EMA/ROC reverse), and a complete bar-by-bar state-machine engine with backtester.
 
 ### layered-regime-momentum
-4-layer multi-timeframe system built incrementally. Layer 1 (implemented): 1h + 30m HMA(20) slope regime read, 5 states (NEUTRAL/EARLY_BULL/BULL/EARLY_SELL/SELL) with no-lookahead cross-timeframe alignment. Layer 2 (implemented): 1h + 15m dynamic bias scoring on ROC9/RSI14/ADX14/Volume (rolling percentile-rank, not fixed thresholds), with a stricter pass bar for early vs. already-confirmed regimes. Layers 3-4 (planned): regime-locked directional entry (structure/cross) and risk management (5% margin/trade, 2 positions max, 1:1.2 R:R with a split TP1/TP2 exit).
+4-layer multi-timeframe system built incrementally. Layer 1 (implemented): 1h + 30m HMA(20) slope regime read, 5 states (NEUTRAL/EARLY_BULL/BULL/EARLY_SELL/SELL) with no-lookahead cross-timeframe alignment. Layer 2 (implemented): 1h + 15m dynamic bias scoring on ROC9/RSI14/ADX14/Volume (rolling percentile-rank, not fixed thresholds), with a stricter pass bar for early vs. already-confirmed regimes. Layer 3 (implemented): regime-locked directional entry via 15m break-of-structure (fractal swing high/low), where going long during a permitted downtrend is structurally impossible. Layer 4 (planned): risk management (5% margin/trade, 2 positions max, 1:1.2 R:R with a split TP1/TP2 exit).
 
 ---
 
