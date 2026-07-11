@@ -29,6 +29,7 @@ Usage:
 
 Configuration (environment variables):
     EXCHANGE_ID        ccxt exchange id           (default: okx)
+    TIMEFRAME          ccxt bar size, e.g. 15m/30m/1h  (default: 30m)
     SYMBOLS            comma-separated symbols     (default: BTC/USDT:USDT)
     PAPER              true/false                  (default: true)
     BALANCE            paper starting balance      (default: 10000)
@@ -40,6 +41,15 @@ Configuration (environment variables):
     MAX_OPEN_POSITIONS portfolio-wide position cap  (default: 2)
     OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSWORD   live credentials
     TELEGRAM_TOKEN / TELEGRAM_CHAT_ID                 optional alerts
+
+Timeframe:
+    Set TIMEFRAME to any ccxt-supported bar size (this strategy was designed
+    for 30m; 15m is also supported). Indicator periods (HMA20, EMA5/9, ROC9,
+    RSI14, ADX14, ATR14, Volume SMA20) are bar counts and are used unchanged
+    on any timeframe -- on 15m they cover half the wall-clock lookback of 30m,
+    so expect more (and noisier) signals. Run one timeframe per deployment;
+    the state machine, RiskManager keys, and Telegram labels are all tagged
+    with the configured TIMEFRAME so logs/positions stay unambiguous.
 
 Leverage and position size:
     notional_per_trade = balance * MARGIN_FRACTION * LEVERAGE
@@ -96,10 +106,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger("tf30m_bot")
 
-TIMEFRAME = "30m"
-BAR_MS = 30 * 60 * 1000
 MIN_WARMUP_BARS = 60          # bars needed before indicators are usable
 FETCH_LIMIT = 320             # history depth per poll (indicator warmup + margin)
+
+
+def _timeframe_minutes(tf: str) -> float:
+    """Parse a ccxt timeframe string ('15m', '30m', '1h', ...) to minutes.
+
+    The strategy's indicator periods (HMA20, EMA5/9, ROC9, RSI14, ADX14,
+    ATR14, Volume SMA20) are bar counts, not durations -- they apply unchanged
+    to whatever timeframe is configured. Only the wall-clock warmup estimate
+    shown in /stats needs to know the bar length.
+    """
+    unit = tf[-1]
+    value = float(tf[:-1])
+    return {"m": value, "h": value * 60, "d": value * 1440}[unit]
 
 
 # ── Per-symbol trader ───────────────────────────────────────────────
@@ -113,6 +134,7 @@ class SymbolTrader:
     """
     symbol: str
     account_balance: float
+    bar_minutes: float = 30.0
     sm: TF30MStateMachine = field(default_factory=TF30MStateMachine)
     last_closed_ts: int = 0
     position_open: bool = False
@@ -131,7 +153,7 @@ class SymbolTrader:
 
     # --- Telegram command surface ---
     def get_status(self) -> dict:
-        warm = max(0, MIN_WARMUP_BARS - self._bars_seen) * 30
+        warm = max(0, MIN_WARMUP_BARS - self._bars_seen) * self.bar_minutes
         return {
             "total_trades": self.trades,
             "market_state": self.market_state,
@@ -157,6 +179,13 @@ class SymbolTrader:
 class TF30MBot:
     def __init__(self) -> None:
         self.exchange_id = os.getenv("EXCHANGE_ID", "okx")
+        self.timeframe = os.getenv("TIMEFRAME", "30m")
+        self.bar_minutes = _timeframe_minutes(self.timeframe)
+        # Bookkeeping tag for RiskManager position keys and Telegram labels --
+        # reflects the configured timeframe so /stats and logs aren't
+        # misleading when running 15m (indicator periods are unchanged; see
+        # references/strategy_spec.md for the bar-count vs. duration distinction).
+        self.strategy_tag = f"hma_ema_{self.timeframe}"
         self.symbols = [
             s.strip() for s in os.getenv("SYMBOLS", "BTC/USDT:USDT").split(",") if s.strip()
         ]
@@ -179,7 +208,8 @@ class TF30MBot:
         self._halt_notified = False
 
         self.traders: dict[str, SymbolTrader] = {
-            s: SymbolTrader(symbol=s, account_balance=self.balance) for s in self.symbols
+            s: SymbolTrader(symbol=s, account_balance=self.balance, bar_minutes=self.bar_minutes)
+            for s in self.symbols
         }
         self._stop_event = threading.Event()
         self.exchange = None                      # set in run() for live/paper feed
@@ -206,7 +236,7 @@ class TF30MBot:
                 positions.append({
                     "symbol": t.symbol,
                     "side": ct.get("direction", "").lower(),
-                    "strategy": "tf30m",
+                    "strategy": self.strategy_tag,
                     "entry": ct.get("entry", 0.0),
                     "stop_loss": ct.get("sl"),
                     "take_profit": ct.get("tp1"),
@@ -249,7 +279,7 @@ class TF30MBot:
 
     def _fetch_closed_df(self, symbol: str) -> pd.DataFrame:
         """Fetch OHLCV and drop the still-forming last candle."""
-        raw = self.exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=FETCH_LIMIT)
+        raw = self.exchange.fetch_ohlcv(symbol, timeframe=self.timeframe, limit=FETCH_LIMIT)
         if len(raw) >= 2:
             raw = raw[:-1]  # exclude the in-progress bar
         return pd.DataFrame(
@@ -302,7 +332,7 @@ class TF30MBot:
     # ── Trade lifecycle ─────────────────────────────────────────────
     def _enter(self, trader: SymbolTrader, direction: str, row: pd.Series) -> None:
         symbol = trader.symbol
-        ok, why = self.risk.can_open(symbol, "tf30m")
+        ok, why = self.risk.can_open(symbol, self.strategy_tag)
         if not ok:
             trader.log(f"entry blocked: {why}")
             trader.sm.on_position_closed()  # abandon setup, back to WAITING
@@ -328,12 +358,12 @@ class TF30MBot:
                 self._open_live(symbol, direction, amount, sl, tp)
             except Exception as e:  # noqa: BLE001
                 trader.log(f"LIVE entry failed: {e}")
-                self.notifier.notify_order_error(symbol, "tf30m", str(e))
+                self.notifier.notify_order_error(symbol, self.strategy_tag, str(e))
                 trader.sm.on_position_closed()
                 return
 
         self.risk.open_position(symbol, direction.lower(), entry, amount,
-                                strategy="tf30m", stop_loss=sl, take_profit=tp)
+                                strategy=self.strategy_tag, stop_loss=sl, take_profit=tp)
         trader.position_open = True
         trader.current_trade = {
             "direction": direction, "entry": entry, "sl": sl,
@@ -342,7 +372,7 @@ class TF30MBot:
             "snapshot": _snapshot(direction, row, row.get("_score", 0), row.get("_comps", {})),
         }
         trader.log(f"ENTER {direction} @ {entry:.4f}  SL={sl:.4f} TP={tp:.4f} amt={amount:.6f}")
-        self.notifier.notify_buy(symbol, entry, amount, sl, tp, "tf30m")
+        self.notifier.notify_buy(symbol, entry, amount, sl, tp, self.strategy_tag)
 
     def _exit(self, trader: SymbolTrader, exit_price: float, reason: str) -> None:
         ct = trader.current_trade
@@ -360,7 +390,7 @@ class TF30MBot:
                 self._close_live(trader.symbol, direction, amount)
             except Exception as e:  # noqa: BLE001
                 trader.log(f"LIVE close failed: {e}")
-                self.notifier.notify_order_error(trader.symbol, "tf30m", str(e))
+                self.notifier.notify_order_error(trader.symbol, self.strategy_tag, str(e))
 
         if direction == "LONG":
             pnl_pct = (exit_price - entry) / entry
@@ -378,7 +408,7 @@ class TF30MBot:
         else:
             trader.losses += 1
 
-        self.risk.close_position(trader.symbol, "tf30m")
+        self.risk.close_position(trader.symbol, self.strategy_tag)
         trader.position_open = False
         trader.log(f"EXIT {direction} @ {exit_price:.4f} [{reason}] pnl={pnl:+.2f} "
                    f"({pnl_pct:+.2%}) bal={self.balance:.2f}")
@@ -507,7 +537,7 @@ class TF30MBot:
         tg_loop = asyncio.new_event_loop()
         threading.Thread(target=self._run_loop, args=(tg_loop,), daemon=True).start()
         self.notifier.start_polling(tg_loop)
-        self.notifier.notify_bot_started(self.paper, ["tf30m"], self.symbols)
+        self.notifier.notify_bot_started(self.paper, [self.strategy_tag], self.symbols)
 
         logger.info("TF30M bot started | %s | %s | symbols=%s",
                     self.exchange_id, "PAPER" if self.paper else "LIVE", self.symbols)

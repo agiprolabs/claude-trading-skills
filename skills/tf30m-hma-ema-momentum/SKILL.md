@@ -160,6 +160,15 @@ ccxt (OKX futures) → TF30MStateMachine → RiskManager → TelegramNotifier
 
 - **Data/execution**: ccxt, default exchange `okx`, USDT perpetuals
   (`BTC/USDT:USDT`) — supports both **long and short**.
+- **Timeframe**: `TIMEFRAME` selects the ccxt bar size — designed for `30m`,
+  `15m` is also supported. Indicator periods (HMA20, EMA5/9, ROC9, RSI14,
+  ADX14, ATR14, Volume SMA20) are bar counts, not durations, so they're reused
+  unchanged on 15m — that halves the wall-clock lookback of 30m, so expect
+  more (and noisier) signals. Run **one timeframe per deployment** (pick 30m
+  or 15m); the state machine, `RiskManager` position keys, and Telegram labels
+  are all tagged with the configured timeframe (e.g. `hma_ema_15m`) so logs
+  and `/positions` stay unambiguous if you run separate 30m and 15m
+  deployments side by side.
 - **Risk**: `RiskManager` sizes the margin (`MARGIN_FRACTION` × balance,
   default 5%); `run_bot.py` then scales that into the actual traded notional
   by `LEVERAGE` (`notional = balance × MARGIN_FRACTION × LEVERAGE`), same as a
@@ -196,8 +205,11 @@ reduce-only SL/TP params may need tuning for your account configuration.
 ```bash
 uv pip install pandas numpy ccxt aiohttp
 
-# Paper trade OKX BTC + ETH perpetuals (no keys required):
+# Paper trade OKX BTC + ETH perpetuals on 30m (no keys required):
 SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT" python scripts/run_bot.py
+
+# Same, but on 15m bars:
+TIMEFRAME=15m SYMBOLS="BTC/USDT:USDT,ETH/USDT:USDT" python scripts/run_bot.py
 
 # Offline: replay a CSV bar-by-bar through the full bot pipeline:
 python scripts/run_bot.py --replay candles_30m.csv --symbol BTC/USDT:USDT
@@ -208,10 +220,11 @@ PAPER=false OKX_API_KEY=... OKX_API_SECRET=... OKX_API_PASSWORD=... \
 ```
 
 Key environment variables (see the header of `run_bot.py` for the full list):
-`EXCHANGE_ID`, `SYMBOLS`, `PAPER`, `BALANCE`, `LEVERAGE`, `MARGIN_FRACTION`,
-`MARGIN_MODE`, `MAX_OPEN_POSITIONS` (default 2), `MAX_DRAWDOWN_PCT`,
-`POLL_SECONDS`, `OKX_API_KEY` / `OKX_API_SECRET` / `OKX_API_PASSWORD`,
-`TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID`. `.env.example` in this skill's root
+`EXCHANGE_ID`, `TIMEFRAME` (default `30m`), `SYMBOLS`, `PAPER`, `BALANCE`,
+`LEVERAGE`, `MARGIN_FRACTION`, `MARGIN_MODE`, `MAX_OPEN_POSITIONS` (default
+2), `MAX_DRAWDOWN_PCT`, `POLL_SECONDS`, `OKX_API_KEY` / `OKX_API_SECRET` /
+`OKX_API_PASSWORD`, `TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID`. `.env.example` in
+this skill's root
 lists every variable with the recommended starting values.
 
 ### Deploying on Railway
