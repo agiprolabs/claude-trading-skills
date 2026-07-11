@@ -37,8 +37,15 @@ Configuration (environment variables):
     MARGIN_MODE        okx tdMode: cross|isolated  (default: cross)
     MAX_DRAWDOWN_PCT   halt trading at drawdown    (default: 0.15)
     POLL_SECONDS       new-bar check interval      (default: 20)
+    MAX_OPEN_POSITIONS portfolio-wide position cap  (default: 2)
     OKX_API_KEY / OKX_API_SECRET / OKX_API_PASSWORD   live credentials
     TELEGRAM_TOKEN / TELEGRAM_CHAT_ID                 optional alerts
+
+Position limits (both enforced by RiskManager, independent of symbol count):
+    - At most MAX_OPEN_POSITIONS positions open across the whole bot (default 2).
+    - At most 1 open position per symbol at any time -- a symbol already in a
+      LONG cannot also open a SHORT (or a second LONG). This matches the
+      strategy's "Maximum Position: 1 Position per Symbol" rule.
 
 Dependencies:
     uv pip install pandas numpy ccxt aiohttp
@@ -147,12 +154,13 @@ class TF30MBot:
         self.margin_fraction = float(os.getenv("MARGIN_FRACTION", "0.05"))
         self.margin_mode = os.getenv("MARGIN_MODE", "cross")
         self.poll_seconds = float(os.getenv("POLL_SECONDS", "20"))
+        self.max_open_positions = int(os.getenv("MAX_OPEN_POSITIONS", "2"))
         self.pnl_total = 0.0
         self.running = False
 
         self.risk = RiskManager(
             max_risk_per_trade_pct=self.margin_fraction,
-            max_open_positions=len(self.symbols),
+            max_open_positions=self.max_open_positions,
             max_drawdown_pct=float(os.getenv("MAX_DRAWDOWN_PCT", "0.15")),
         )
         self.risk.update_peak(self.balance)

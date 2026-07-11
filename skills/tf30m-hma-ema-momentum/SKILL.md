@@ -160,8 +160,11 @@ ccxt (OKX futures) → TF30MStateMachine → RiskManager → TelegramNotifier
 
 - **Data/execution**: ccxt, default exchange `okx`, USDT perpetuals
   (`BTC/USDT:USDT`) — supports both **long and short**.
-- **Risk**: `RiskManager` handles position sizing (5% notional), the
-  1-position-per-symbol limit, and a max-drawdown halt (default 15%, with
+- **Risk**: `RiskManager` handles position sizing (5% notional), a
+  **portfolio-wide cap of `MAX_OPEN_POSITIONS` (default 2)**, a hard
+  **1-position-per-symbol limit** (a symbol already holding a LONG cannot also
+  open a SHORT, or a second LONG — enforced in `RiskManager.can_open`
+  regardless of symbol count), and a max-drawdown halt (default 15%, with
   auto-recovery). ATR(14)×1.5 stop/take-profit (1:1) are passed explicitly,
   overriding the module's percentage defaults so the bot matches the TF30M spec.
 - **Alerts/commands**: `TelegramNotifier` sends entry/exit/halt alerts and
@@ -190,8 +193,36 @@ PAPER=false OKX_API_KEY=... OKX_API_SECRET=... OKX_API_PASSWORD=... \
 
 Key environment variables (see the header of `run_bot.py` for the full list):
 `EXCHANGE_ID`, `SYMBOLS`, `PAPER`, `BALANCE`, `LEVERAGE`, `MARGIN_FRACTION`,
-`MARGIN_MODE`, `MAX_DRAWDOWN_PCT`, `POLL_SECONDS`, `OKX_API_KEY` /
-`OKX_API_SECRET` / `OKX_API_PASSWORD`, `TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID`.
+`MARGIN_MODE`, `MAX_OPEN_POSITIONS` (default 2), `MAX_DRAWDOWN_PCT`,
+`POLL_SECONDS`, `OKX_API_KEY` / `OKX_API_SECRET` / `OKX_API_PASSWORD`,
+`TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID`. `.env.example` in this skill's root
+lists every variable with the recommended starting values.
+
+### Deploying on Railway
+
+The skill folder is ready to deploy as a Railway worker service (no HTTP port
+needed — it's a background loop, not a web server):
+
+1. **New Project → Deploy from GitHub repo**, pick this repo.
+2. In the service's **Settings → Root Directory**, set it to
+   `skills/tf30m-hma-ema-momentum`. Railway (Nixpacks) then finds
+   `requirements.txt` there and installs it automatically.
+3. **Settings → Deploy**: the start command comes from `railway.json`
+   (`python scripts/run_bot.py`) — no need to set it manually. `Procfile` is
+   included too as a fallback if you switch builders.
+4. **Variables tab**: copy every key from `.env.example` and set your values
+   (`SYMBOLS`, `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID`, and OKX keys once you're
+   ready for `PAPER=false`). Leave `PAPER=true` for the first deploy.
+5. Deploy, then watch the **Deployments → Logs** tab — you should see
+   `TF30M bot started | okx | PAPER | symbols=[...]` and, a bar or two later,
+   `synced to bar ...`.
+6. If Telegram is configured, `/stats` and `/status` work immediately;
+   `restartPolicyType: ON_FAILURE` in `railway.json` restarts the worker if it
+   crashes (e.g. a transient exchange API error).
+
+`MAX_OPEN_POSITIONS=2` and the 1-per-symbol rule are the safety rails to keep
+in place before flipping to live trading — increase `MAX_OPEN_POSITIONS`
+only once you're comfortable with the drawdown behavior in paper mode.
 
 ---
 
@@ -208,6 +239,12 @@ Key environment variables (see the header of `run_bot.py` for the full list):
 - `scripts/risk_manager.py` — position sizing, SL/TP, position limits, and the
   drawdown-halt guard.
 - `scripts/telegram_notifier.py` — Telegram alerts and command handler.
+
+### Deployment
+- `requirements.txt` — pinned deps for Railway/Nixpacks (root of this skill).
+- `Procfile` — `worker: python scripts/run_bot.py`.
+- `railway.json` — Nixpacks build + start command + restart policy.
+- `.env.example` — every environment variable with recommended defaults.
 
 ### References
 - `references/strategy_spec.md` — full specification: gates, triggers,
