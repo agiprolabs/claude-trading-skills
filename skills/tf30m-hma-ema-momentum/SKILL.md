@@ -293,6 +293,11 @@ only once you're comfortable with the drawdown behavior in paper mode.
 - `scripts/risk_manager.py` — position sizing, SL/TP, position limits, and the
   drawdown-halt guard.
 - `scripts/telegram_notifier.py` — Telegram alerts and command handler.
+- `scripts/portfolio_backtest.py` — multi-symbol backtest that replays several
+  symbols' historical OHLCV in true chronological order through the same
+  `TF30MBot`/`RiskManager` used live, sharing one balance and one
+  `MAX_OPEN_POSITIONS` cap — the realistic multi-symbol counterpart to
+  `run_bot.py --replay`'s single-symbol test.
 
 ### Deployment
 - `requirements.txt` — pinned deps for Railway/Nixpacks (root of this skill).
