@@ -289,7 +289,7 @@ uv --version
 - **strategy-framework** — Standardized strategy definition and documentation template
 - **walk-forward-validation** — Time-series-aware validation, overfit detection, CPCV
 - **tf30m-hma-ema-momentum** — 30m HMA20 gate + EMA5/9 cross with ROC/RSI/ADX/Volume confirmation, ATR stops, state-machine engine
-- **layered-regime-momentum** — 4-layer multi-timeframe system built incrementally: 1h+30m regime agreement (Layer 1, implemented), context bias, regime-locked entry, and split-TP risk management (Layers 2-4, planned)
+- **layered-regime-momentum** — complete 4-layer multi-timeframe system: 1h+30m regime agreement, 1h+15m dynamic bias scoring, regime-locked structure-break entry, and split-TP1/TP2 risk management with a full portfolio backtest engine
 
 ### ⚖️ Portfolio & Risk (4 skills)
 - **portfolio-analytics** — Sharpe, Sortino, Calmar, max drawdown, quantstats reports

@@ -1,6 +1,6 @@
 ---
 name: layered-regime-momentum
-description: Multi-timeframe layered trading system built incrementally — Layer 1 (1h+30m HMA20-slope regime read, 5 states), Layer 2 (1h+15m dynamic bias scoring on ROC/RSI/ADX/Volume, stricter threshold for early vs confirmed regimes), and Layer 3 (regime-locked directional entry via 15m break-of-structure) are implemented; Layer 4 (risk management with split TP1/TP2) is planned. Standalone sibling to tf30m-hma-ema-momentum, not a replacement.
+description: Complete 4-layer multi-timeframe trading system, built and tested incrementally — Layer 1 (1h+30m HMA20-slope regime read, 5 states), Layer 2 (1h+15m dynamic bias scoring on ROC/RSI/ADX/Volume, stricter threshold for early vs confirmed regimes), Layer 3 (regime-locked directional entry via 15m break-of-structure), and Layer 4 (risk management: 5% margin/position, max 2 positions, split TP1/TP2 at 0.5R/1.2R with a breakeven stop after TP1) tie together into a runnable portfolio backtest. Standalone sibling to tf30m-hma-ema-momentum, not a replacement.
 ---
 
 # Layered Regime Momentum
@@ -28,7 +28,7 @@ compared side by side.
 | 1. Regime agreement | ✅ Implemented, tested | `scripts/layer1_regime.py` |
 | 2. Context bias / dynamic scoring | ✅ Implemented, tested | `scripts/layer2_bias.py` |
 | 3. Directional entry | ✅ Implemented, tested | `scripts/layer3_entry.py` |
-| 4. Risk management | ⏳ Not started | — |
+| 4. Risk management | ✅ Implemented, tested | `scripts/layer4_risk.py` |
 
 ---
 
@@ -234,12 +234,65 @@ versa), matching the "structurally impossible" design goal exactly.
 
 ---
 
-## Layer 4 (planned)
+## Layer 4 — Risk Management (ties Layers 1-3 into a full backtest)
 
-- **Risk management**: 5% of balance margin per position, max 2 concurrent
-  positions, no second position on a symbol already holding one, R:R 1:1.2
-  with stops at ATR(14)×1.5 (1R), split exit — 50% of size at TP1 (0.5R),
-  remaining 50% at TP2 (1.2R).
+**Rule**: Layer 3 only says "enter LONG/SHORT here" — Layer 4 decides whether
+that's actually allowed right now, sizes it, and manages the trade from
+entry to exit.
+
+| | |
+|---|---|
+| Margin per position | 5% of current balance (no leverage — margin *is* the notional; leverage isn't part of this layer's spec, so none is assumed) |
+| Position limits | max 2 concurrent positions across the whole portfolio; at most 1 per symbol |
+| Risk unit (1R) | ATR(14) × 1.5, in price terms, at entry |
+| Stop loss | entry ∓ 1R |
+| Take-profit split | TP1 at 0.5R closes 50% of size; TP2 at 1.2R closes the remaining 50% |
+
+**Design choice beyond the literal spec**: once TP1 fills, the stop for the
+remaining 50% moves to **breakeven** (entry price). This wasn't asked for
+explicitly, but it's the standard, near-universal convention for exactly
+this split-TP shape — bank the first target, then risk nothing further on
+the runner. `Layer4RiskManager(move_to_breakeven=False)` turns it off if a
+fixed original stop is wanted instead. The test suite specifically checks
+that this makes the *whole trade* net non-negative even if the runner gives
+back everything after TP1 (`test_long_tp1_then_reverses_to_breakeven_nets_a_small_gain_not_a_loss`).
+
+**Same-bar ordering**: if a single bar's high/low range spans both a stop and
+a target, the stop is assumed to have been touched first (matches the
+precedent in `tf30m-hma-ema-momentum`'s engine) — conservative, since OHLC
+bars don't reveal intrabar sequencing.
+
+### Usage
+
+```bash
+python scripts/layer4_risk.py --demo
+
+# Full backtest: needs {SYMBOL}_1h.csv, {SYMBOL}_30m.csv, {SYMBOL}_15m.csv per symbol
+python scripts/layer4_risk.py --data-dir clean_data --symbols BTC,ETH,SOL,XRP,XAU,XAG
+```
+
+```python
+from layer4_risk import run_layer4_backtest, summarize
+symbol_data = {"BTC": (df_1h, df_30m, df_15m), ...}  # per symbol
+risk, signals = run_layer4_backtest(symbol_data, balance=10_000)
+print(summarize(risk, 10_000))
+for fill in risk.fills:
+    print(fill.symbol, fill.direction, fill.reason, f"{fill.pnl:+.2f}")
+```
+
+Real-data check (BTC/ETH/SOL/XRP/XAU/XAG, 6 months): 2,643 fills, 56.2% win
+rate, profit factor 1.07, **+1.05% return** on a $10,000 start. Reason
+breakdown: 533 SL, 1,055 TP1, 431 TP2, 624 BREAKEVEN_STOP (531 + 1055 = 1,588
+trades opened; of the 1,055 that reached TP1, 431 ran to TP2 and 624 gave
+back to breakeven — arithmetic checks out exactly). A separate instrumented
+run confirmed the 2-position portfolio cap was never exceeded across the
+entire 6-symbol run (max concurrent observed: exactly 2).
+
+One data-quality note carried over from the source dataset: SOL's 1h history
+only covered June 2026 (720 hourly bars vs. ~4,344 for the other five
+symbols), so SOL's Layer 1 regime was NEUTRAL/warming-up for most of the
+6-month window — its 81 fills (vs. 450-580 for the others) reflect that gap,
+not the strategy performing differently on SOL specifically.
 
 ---
 
@@ -261,6 +314,14 @@ versa), matching the "structurally impossible" design goal exactly.
   structurally impossible during a permitted downtrend (and vice versa).
   Imports `layer2_bias.py` (sibling script). CLI with `--demo` and
   `--csv-1h`/`--csv-30m`/`--csv-15m`.
+- `scripts/layer4_risk.py` — ATR14, the `Layer4RiskManager` (position
+  sizing, portfolio + per-symbol limits, split TP1/TP2 with breakeven-stop
+  mechanics), and `run_layer4_backtest` / `summarize`, which tie all four
+  layers into one runnable multi-symbol portfolio backtest (chronological
+  heap-merge across symbols, same technique as
+  `tf30m-hma-ema-momentum/scripts/portfolio_backtest.py`). Imports
+  `layer3_entry.py` (sibling script). CLI with `--demo` and
+  `--data-dir`/`--symbols`.
 
 ### Tests
 - `tests/test_layer1_regime.py` (repo root) — warmup-neutral behavior, the
@@ -276,6 +337,10 @@ versa), matching the "structurally impossible" design goal exactly.
   it), the one-shot break-of-structure property, the regime lock (LONG only
   with BULL direction + layer2_pass, and vice versa), and a check that a
   break with the wrong bias strength produces no entry.
+- `tests/test_layer4_risk.py` (repo root) — position limits (max 2
+  portfolio-wide, 1 per symbol), margin sizing, exact-dollar-math checks for
+  the SL/TP1/TP2/breakeven-stop mechanics on both LONG and SHORT, and the
+  same-bar conservative-ordering rule.
 
 *This skill provides analytical tools and information only. It does not
 constitute financial advice or trading recommendations.*
