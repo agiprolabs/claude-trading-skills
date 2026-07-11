@@ -1,6 +1,6 @@
 ---
 name: layered-regime-momentum
-description: Multi-timeframe layered trading system built incrementally — Layer 1 (1h+30m HMA20-slope regime read, 5 states: NEUTRAL/EARLY_BULL/BULL/EARLY_SELL/SELL) is implemented; Layer 2 (context bias scoring), Layer 3 (regime-locked entry), and Layer 4 (risk management with split TP1/TP2) are planned. Standalone sibling to tf30m-hma-ema-momentum, not a replacement.
+description: Multi-timeframe layered trading system built incrementally — Layer 1 (1h+30m HMA20-slope regime read, 5 states: NEUTRAL/EARLY_BULL/BULL/EARLY_SELL/SELL) and Layer 2 (1h+15m dynamic bias scoring on ROC/RSI/ADX/Volume, with a stricter pass threshold for early vs confirmed regimes) are implemented; Layer 3 (regime-locked entry) and Layer 4 (risk management with split TP1/TP2) are planned. Standalone sibling to tf30m-hma-ema-momentum, not a replacement.
 ---
 
 # Layered Regime Momentum
@@ -26,7 +26,7 @@ compared side by side.
 | Layer | Status | File |
 |---|---|---|
 | 1. Regime agreement | ✅ Implemented, tested | `scripts/layer1_regime.py` |
-| 2. Context bias / dynamic scoring | ⏳ Not started | — |
+| 2. Context bias / dynamic scoring | ✅ Implemented, tested | `scripts/layer2_bias.py` |
 | 3. Directional entry | ⏳ Not started | — |
 | 4. Risk management | ⏳ Not started | — |
 
@@ -114,13 +114,76 @@ picked a side yet — a narrow condition once past HMA warmup.
 
 ---
 
-## Layers 2–4 (planned)
+## Layer 2 — Context Bias (1h + 15m dynamic scoring)
 
-Not yet implemented — will be built and documented here once each is
-designed and tested, one at a time, per the project's own build order:
+**Rule**: reuses the same 4 confirmation indicators as `tf30m-hma-ema-momentum`
+(ROC9, RSI14, ADX14, Volume vs SMA20), computed on **1h and 15m**, but scores
+each one *continuously* (0-100, "how strongly does this support Layer 1's
+direction") instead of counting binary pass/fail conditions:
 
-- **Layer 2 — Context bias**: takes Layer 1's regime and computes a dynamic
-  score from 1h + 15m to confirm (or veto) it before Layer 3 acts.
+| Indicator | Directional? | Score method |
+|---|---|---|
+| ROC9 | Yes | Rolling percentile rank (100 bars) of ROC9 for BULL, of `-ROC9` for SELL |
+| RSI14 | Yes | RSI14 directly for BULL, `100 - RSI14` for SELL (already a natural 0-100 gauge) |
+| ADX14 | No | Rolling percentile rank of ADX14 — trend *strength* has no direction of its own, so the same score applies to BULL or SELL |
+| Volume | No | Rolling percentile rank of `volume / volume_sma20` — same reasoning as ADX |
+
+A timeframe's score is the mean of its 4 components. Layer 2's combined score
+is `0.5 × score_1h + 0.5 × score_15m` (equal weight by default — adjustable
+via `weight_1h`).
+
+**Percentile rank, not a fixed threshold**: momentum/trend-strength have no
+fixed scale across assets or volatility regimes, so each is ranked against
+its *own trailing 100-bar history* rather than compared to a hardcoded
+number — literally the "dynamic" in dynamic scoring. One consequence worth
+knowing: a smoothly, constantly compounding trend (the *same* % move every
+bar) produces a *flat* ROC/ADX, which then ranks near the 50th percentile
+against its own recent history — not near 100 — because percentile rank
+measures "more extreme than recently," not "absolute level." It's
+*acceleration/deceleration* that pushes a score toward the extremes, not
+sustained-but-steady movement. (Caught by an initial version of the test
+suite using a constant-rate trend that failed to score highly — fixed by
+testing with a genuinely accelerating trend instead, which is also the more
+realistic case for real market data.)
+
+**Threshold depends on how confirmed Layer 1 already is:**
+
+```
+layer1_regime      Layer 2 pass condition
+BULL / SELL         layer2_score >= 55  (CONFIRMED_THRESHOLD)
+EARLY_BULL/SELL     layer2_score >= 70  (EARLY_THRESHOLD, stricter)
+NEUTRAL             never passes -- no direction to score bias against
+```
+
+An early (unconfirmed) regime needs materially stronger bias evidence before
+Layer 3 is allowed to act on it than an already-fully-agreeing one.
+
+### Usage
+
+```bash
+python scripts/layer2_bias.py --demo
+python scripts/layer2_bias.py --csv-1h btc_1h.csv --csv-30m btc_30m.csv --csv-15m btc_15m.csv
+```
+
+```python
+from layer2_bias import layer2_bias
+result = layer2_bias(df_1h, df_30m, df_15m)  # one row per 15m bar
+# columns: timestamp, layer1_regime, bias_1h, bias_15m,
+#          layer2_score, layer2_threshold, layer2_pass, layer2_direction
+latest = result.iloc[-1]
+if latest.layer2_pass:
+    print(f"Layer 2 confirms {latest.layer2_direction} (score {latest.layer2_score:.1f})")
+```
+
+Real-data sanity check (BTC, 6 months): `EARLY_BULL` passes 0.9% of the time,
+`EARLY_SELL` 1.1% (both near the strict 70 threshold, as intended), `BULL`
+53.2%, `SELL` 59.6% (roughly half, at the looser 55 threshold) — the
+threshold split by Layer 1 state is doing real work, not just decorative.
+
+---
+
+## Layers 3–4 (planned)
+
 - **Layer 3 — Directional entry**: trades *only* in the Layer 1/2 direction
   (an uptrend permits long entries only, never short); entry trigger via
   market structure and/or a fast/slow cross indicator.
@@ -138,12 +201,22 @@ designed and tested, one at a time, per the project's own build order:
   classification, no-lookahead cross-timeframe alignment, the 5-state
   `classify_layer1` combination logic, and a CLI with `--demo` and
   `--csv-1h`/`--csv-30m`.
+- `scripts/layer2_bias.py` — ROC9/RSI14/ADX14/Volume indicators, rolling
+  percentile-rank normalization, directional (BULL/SELL-aware) scoring per
+  timeframe, combined 1h+15m dynamic score, and the Layer-1-state-dependent
+  pass threshold. Imports `layer1_regime.py` (sibling script) for the Layer 1
+  read and its no-lookahead alignment helper. CLI with `--demo` and
+  `--csv-1h`/`--csv-30m`/`--csv-15m`.
 
 ### Tests
 - `tests/test_layer1_regime.py` (repo root) — warmup-neutral behavior, the
   no-lookahead alignment regression test, a full 3×3 table test of
   `classify_layer1` covering all nine (regime_30m, regime_1h) combinations,
   and an end-to-end confirmed-agreement check.
+- `tests/test_layer2_bias.py` (repo root) — percentile-rank sanity checks,
+  the BULL/SELL mirroring test for directional scoring, the
+  confirmed-vs-early threshold split, a NEUTRAL-never-passes check, and an
+  end-to-end accelerating-uptrend check.
 
 *This skill provides analytical tools and information only. It does not
 constitute financial advice or trading recommendations.*

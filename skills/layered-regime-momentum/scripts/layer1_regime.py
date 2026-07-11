@@ -92,12 +92,13 @@ def _infer_interval_ms(timestamps: pd.Series) -> int:
     return int(diffs.median())
 
 
-def align_htf_to_ltf(ltf_timestamps: pd.Series, htf_regime: pd.DataFrame,
-                      column_name: str) -> pd.Series:
+def align_htf_to_ltf(ltf_timestamps: pd.Series, htf_df: pd.DataFrame,
+                      column_name: str, source_column: str = "regime") -> pd.Series:
     """As-of (backward) join: for each LTF bar, take the most recently
-    *closed* HTF bar's regime.
+    *closed* HTF bar's value of `source_column`.
 
-    `timestamp` throughout this module is a bar's **open** time (the ccxt/
+    `timestamp` throughout this module (and the sibling `layer2_bias`
+    module, which reuses this function) is a bar's **open** time (the ccxt/
     Binance convention). A bar is only actually closed at open_time +
     interval. Joining directly on open-time timestamps would match an HTF
     bar that has merely *opened* by the LTF bar's timestamp, not one that has
@@ -107,15 +108,15 @@ def align_htf_to_ltf(ltf_timestamps: pd.Series, htf_regime: pd.DataFrame,
     """
     ltf_ts = pd.Series(ltf_timestamps).reset_index(drop=True)
     ltf_interval = _infer_interval_ms(ltf_ts)
-    htf_interval = _infer_interval_ms(htf_regime["timestamp"])
+    htf_interval = _infer_interval_ms(htf_df["timestamp"])
 
     left = pd.DataFrame({
         "close_time": ltf_ts + ltf_interval,
         "_order": range(len(ltf_ts)),
     }).sort_values("close_time")
     right = pd.DataFrame({
-        "close_time": htf_regime["timestamp"] + htf_interval,
-        column_name: htf_regime["regime"].values,
+        "close_time": htf_df["timestamp"] + htf_interval,
+        column_name: htf_df[source_column].values,
     }).sort_values("close_time")
 
     merged = pd.merge_asof(left, right, on="close_time", direction="backward")
