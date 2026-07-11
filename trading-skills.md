@@ -1,6 +1,6 @@
 # Trading Skills — Complete Catalog
 
-This document provides detailed descriptions of all 67 trading skills organized by category.
+This document provides detailed descriptions of all 68 trading skills organized by category.
 
 ---
 
@@ -96,6 +96,9 @@ Standardized template for defining strategies: entry rules, exit rules, position
 
 ### walk-forward-validation
 Walk-forward validation framework for trading strategies and ML models. Rolling and expanding window splits, purged cross-validation, embargo periods, combinatorial purged CV (CPCV), deflated Sharpe ratio, and probability of backtest overfitting. Essential for detecting overfit strategies.
+
+### tf30m-hma-ema-momentum
+30-minute trend-momentum strategy. HMA(20) direction gate + EMA(5)/EMA(9) cross trigger, with a 4-part confirmation score (ROC, RSI, ADX, Volume) requiring at least 3 of 4. ATR(14)-based stop/take-profit at 1:1 R:R, direction-signal early exits (HMA/EMA/ROC reverse), and a complete bar-by-bar state-machine engine with backtester.
 
 ---
 

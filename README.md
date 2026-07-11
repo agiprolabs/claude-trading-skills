@@ -1,11 +1,11 @@
 # Claude Trading Skills
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
-[![Skills](https://img.shields.io/badge/Skills-67-brightgreen.svg)](#whats-included)
+[![Skills](https://img.shields.io/badge/Skills-68-brightgreen.svg)](#whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io)
 [![Works with](https://img.shields.io/badge/Works_with-Claude_Code_|_Cursor_|_Codex_|_Gemini_CLI-blue.svg)](#getting-started)
 
-A comprehensive collection of **67 ready-to-use trading, DeFi, and quantitative finance [Agent Skills](https://agentskills.io)**. Works with Claude Code, Cursor, Codex, Gemini CLI, and [30+ other tools](https://agentskills.io). Transform your AI agent into a trading analyst capable of executing complex multi-step workflows across market data analysis, on-chain research, backtesting, risk management, tax compliance, and more.
+A comprehensive collection of **68 ready-to-use trading, DeFi, and quantitative finance [Agent Skills](https://agentskills.io)**. Works with Claude Code, Cursor, Codex, Gemini CLI, and [30+ other tools](https://agentskills.io). Transform your AI agent into a trading analyst capable of executing complex multi-step workflows across market data analysis, on-chain research, backtesting, risk management, tax compliance, and more.
 
 **Crypto/DeFi-first. Extensible to all of quant finance.**
 
@@ -45,7 +45,7 @@ A comprehensive collection of **67 ready-to-use trading, DeFi, and quantitative 
 - **Multi-step workflows** — Chain data retrieval → analysis → visualization in a single prompt
 
 ### 🎯 Comprehensive Coverage
-- **67 Skills** across 17 categories covering the full trading workflow
+- **68 Skills** across 17 categories covering the full trading workflow
 - **7 Market Data APIs** — Solana-native and cross-chain data sources
 - **6 Solana Infrastructure** tools for real-time streams, shreds, bundles, DEX aggregation, and transaction building
 - **5 On-Chain Analysis** tools for wallet profiling, whale tracking, sybil detection, and liquidity analysis
@@ -69,7 +69,7 @@ A comprehensive collection of **67 ready-to-use trading, DeFi, and quantitative 
 | 🔌 **Solana Infrastructure** | 6 | PumpFun mechanics, transaction building, Yellowstone gRPC, ShredStream, Jito bundles, Raptor DEX aggregator |
 | 🔗 **On-Chain Analysis** | 5 | Wallet profiling, holder analysis, whale tracking, liquidity, sybil detection |
 | 📈 **Technical Analysis** | 3 | pandas-ta, TA-Lib, crypto-native custom indicators |
-| 🔄 **Backtesting & Strategy** | 4 | vectorbt, Backtrader, strategy framework, walk-forward validation |
+| 🔄 **Backtesting & Strategy** | 5 | vectorbt, Backtrader, strategy framework, walk-forward validation, TF30M HMA-EMA momentum |
 | ⚖️ **Portfolio & Risk** | 4 | Portfolio analytics, position sizing, risk management, Kelly criterion |
 | 🏦 **DeFi Specific** | 6 | LP math, impermanent loss, yield analysis, MEV, tokenomics, DEX pool analysis |
 | 📐 **Statistical Methods** | 5 | Regime detection, volatility modeling, cointegration, mean reversion, correlation |
@@ -109,7 +109,7 @@ The fastest way to install. Requires Claude Code v1.0.33+.
 /plugin install trading-skills@agiprolabs-claude-trading-skills
 ```
 
-**That's it!** All 67 skills are now available. Claude will automatically discover and use them when relevant to your trading tasks. Skills are namespaced as `/trading-skills:skill-name`.
+**That's it!** All 68 skills are now available. Claude will automatically discover and use them when relevant to your trading tasks. Skills are namespaced as `/trading-skills:skill-name`.
 
 **Managing the plugin:**
 
@@ -283,11 +283,12 @@ uv --version
 - **ta-lib** — C-optimized indicators + 61 candlestick pattern recognition functions
 - **custom-indicators** — Crypto-native: NVT, MVRV, exchange flow, funding rate signals
 
-### 🔄 Backtesting & Strategy (4 skills)
+### 🔄 Backtesting & Strategy (5 skills)
 - **vectorbt** — High-performance vectorized backtesting with parameter optimization
 - **backtrader** — Event-driven backtesting with rich order types and analyzers
 - **strategy-framework** — Standardized strategy definition and documentation template
 - **walk-forward-validation** — Time-series-aware validation, overfit detection, CPCV
+- **tf30m-hma-ema-momentum** — 30m HMA20 gate + EMA5/9 cross with ROC/RSI/ADX/Volume confirmation, ATR stops, state-machine engine
 
 ### ⚖️ Portfolio & Risk (4 skills)
 - **portfolio-analytics** — Sharpe, Sortino, Calmar, max drawdown, quantstats reports
@@ -479,7 +480,7 @@ A: [Open an issue](https://github.com/agiprolabs/claude-trading-skills/issues) w
   title = {Claude Trading Skills: Trading, DeFi, and Quantitative Finance Agent Skills},
   year = {2026},
   url = {https://github.com/agiprolabs/claude-trading-skills},
-  note = {67 skills covering market data, on-chain analysis, backtesting, risk management, tax compliance, and more}
+  note = {68 skills covering market data, on-chain analysis, backtesting, risk management, tax compliance, and more}
 }
 ```
 
