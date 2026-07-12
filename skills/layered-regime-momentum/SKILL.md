@@ -1,6 +1,6 @@
 ---
 name: layered-regime-momentum
-description: Complete 4-layer multi-timeframe trading system, built and tested incrementally — Layer 1 (1h+30m HMA20-slope regime read, 5 states), Layer 2 (1h+15m dynamic bias scoring on ROC/RSI/ADX/Volume, stricter threshold for early vs confirmed regimes), Layer 3 (regime-locked directional entry via 15m break-of-structure), and Layer 4 (risk management: 5% margin/position, max 2 positions, split TP1/TP2 at 0.5R/1.2R with a breakeven stop after TP1) tie together into a runnable portfolio backtest. Standalone sibling to tf30m-hma-ema-momentum, not a replacement.
+description: Complete 4-layer multi-timeframe trading system, built and tested incrementally — Layer 1 (1h+30m HMA20-slope regime read, 5 states), Layer 2 (1h+15m dynamic bias scoring on ROC/RSI/ADX/Volume, stricter threshold for early vs confirmed regimes), Layer 3 (regime-locked directional entry via 15m break-of-structure), and Layer 4 (risk management: 5% margin/position, max 2 positions, split TP1/TP2 at 0.5R/1.2R with the stop moved to breakeven+0.1R after TP1) tie together into a runnable portfolio backtest. Standalone sibling to tf30m-hma-ema-momentum, not a replacement.
 ---
 
 # Layered Regime Momentum
@@ -248,14 +248,16 @@ entry to exit.
 | Stop loss | entry ∓ 1R |
 | Take-profit split | TP1 at 0.5R closes 50% of size; TP2 at 1.2R closes the remaining 50% |
 
-**Design choice beyond the literal spec**: once TP1 fills, the stop for the
-remaining 50% moves to **breakeven** (entry price). This wasn't asked for
-explicitly, but it's the standard, near-universal convention for exactly
-this split-TP shape — bank the first target, then risk nothing further on
-the runner. `Layer4RiskManager(move_to_breakeven=False)` turns it off if a
-fixed original stop is wanted instead. The test suite specifically checks
-that this makes the *whole trade* net non-negative even if the runner gives
-back everything after TP1 (`test_long_tp1_then_reverses_to_breakeven_nets_a_small_gain_not_a_loss`).
+**Design choice, confirmed with the user**: once TP1 fills, the stop for the
+remaining 50% moves to **breakeven + 0.1R** (`entry + 0.1×risk_distance` for
+a LONG, `entry - 0.1×risk_distance` for a SHORT) — not exact breakeven. This
+locks in a small guaranteed gain on the runner rather than a guaranteed wash,
+on top of TP1's already-realized gain. `Layer4RiskManager(move_to_breakeven=False)`
+turns the whole mechanism off (fixed original stop instead); a different
+offset is available via `breakeven_offset_r`. The test suite specifically
+checks that this makes the *whole trade* net a gain even if the runner gives
+back everything down to the new stop
+(`test_long_tp1_then_reverses_to_be_stop_still_nets_a_gain`).
 
 **Same-bar ordering**: if a single bar's high/low range spans both a stop and
 a target, the stop is assumed to have been touched first (matches the
@@ -280,13 +282,16 @@ for fill in risk.fills:
     print(fill.symbol, fill.direction, fill.reason, f"{fill.pnl:+.2f}")
 ```
 
-Real-data check (BTC/ETH/SOL/XRP/XAU/XAG, 6 months): 2,643 fills, 56.2% win
-rate, profit factor 1.07, **+1.05% return** on a $10,000 start. Reason
-breakdown: 533 SL, 1,055 TP1, 431 TP2, 624 BREAKEVEN_STOP (531 + 1055 = 1,588
-trades opened; of the 1,055 that reached TP1, 431 ran to TP2 and 624 gave
-back to breakeven — arithmetic checks out exactly). A separate instrumented
-run confirmed the 2-position portfolio cap was never exceeded across the
-entire 6-symbol run (max concurrent observed: exactly 2).
+Real-data check (BTC/ETH/SOL/XRP/XAU/XAG, 6 months): 2,672 fills, 79.9% win
+rate, profit factor 1.08, **+1.20% return** on a $10,000 start. Reason
+breakdown: 538 SL, 1,067 TP1, 394 TP2, 673 BE_STOP (538 + 1,067 = 1,605
+trades opened; of the 1,067 that reached TP1, 394 ran to TP2 and 673 gave
+back to the BE+0.1R stop — arithmetic checks out exactly). Win rate jumped
+from 56.2%/PF 1.07 under the original exact-breakeven design specifically
+*because* BE_STOP fills are now small wins (+0.1R) instead of a wash — the
+same underlying trades, a better exit rule on the runner. A separate
+instrumented run confirmed the 2-position portfolio cap was never exceeded
+across the entire 6-symbol run (max concurrent observed: exactly 2).
 
 One data-quality note carried over from the source dataset: SOL's 1h history
 only covered June 2026 (720 hourly bars vs. ~4,344 for the other five

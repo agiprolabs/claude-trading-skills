@@ -89,7 +89,7 @@ class SplitTakeProfitTests(unittest.TestCase):
         self.assertAlmostEqual(risk.fills[0].portion_margin, 250.0)  # 50% of 500
         self.assertIn("BTC", risk.positions)  # runner still open
         self.assertTrue(risk.positions["BTC"].tp1_hit)
-        self.assertAlmostEqual(risk.positions["BTC"].sl, 100.0)  # moved to breakeven
+        self.assertAlmostEqual(risk.positions["BTC"].sl, 100.3)  # moved to BE + 0.1*risk_distance(3)
 
         # Bar 2: price continues up to TP2.
         risk.check_exit("BTC", high=103.7, low=102.0, ts=2)
@@ -103,21 +103,24 @@ class SplitTakeProfitTests(unittest.TestCase):
         expected_pnl = 250.0 * 0.015 + 250.0 * 0.036
         self.assertAlmostEqual(risk.fills[0].pnl + risk.fills[1].pnl, expected_pnl, places=4)
 
-    def test_long_tp1_then_reverses_to_breakeven_nets_a_small_gain_not_a_loss(self):
-        """The whole point of moving the stop to breakeven after TP1: even
-        if the runner gives back everything, the trade as a whole cannot
-        lose money -- TP1's realized gain stands regardless."""
+    def test_long_tp1_then_reverses_to_be_stop_still_nets_a_gain(self):
+        """The whole point of moving the stop to BE+0.1R after TP1: even if
+        the runner gives back everything down to the new stop, the trade as
+        a whole still nets a small gain, not just a wash -- TP1's realized
+        gain plus the +0.1R locked in on the runner both stand."""
         module = load_layer4_risk()
         risk = module.Layer4RiskManager(balance=10_000.0)
+        # entry 100, atr 2 -> risk_distance = 3 -> post-TP1 stop = 100 + 0.1*3 = 100.3
         risk.open("BTC", "LONG", 100.0, entry_ts=0, atr_value=2.0)
 
         risk.check_exit("BTC", high=101.6, low=100.2, ts=1)  # TP1 hit
-        risk.check_exit("BTC", high=100.5, low=99.5, ts=2)   # reverses back to breakeven
+        self.assertAlmostEqual(risk.positions["BTC"].sl, 100.3)
+        risk.check_exit("BTC", high=100.5, low=99.5, ts=2)   # reverses back down through the new stop
 
         self.assertEqual(len(risk.fills), 2)
-        self.assertEqual(risk.fills[1].reason, "BREAKEVEN_STOP")
-        self.assertAlmostEqual(risk.fills[1].exit_price, 100.0)
-        self.assertAlmostEqual(risk.fills[1].pnl, 0.0)
+        self.assertEqual(risk.fills[1].reason, "BE_STOP")
+        self.assertAlmostEqual(risk.fills[1].exit_price, 100.3)
+        self.assertGreater(risk.fills[1].pnl, 0.0, "BE+0.1R must be a small win, not a wash")
         total_pnl = risk.fills[0].pnl + risk.fills[1].pnl
         self.assertGreater(total_pnl, 0.0, "TP1's gain must stand even if the runner gives back everything")
 
@@ -132,7 +135,8 @@ class SplitTakeProfitTests(unittest.TestCase):
         risk.check_exit("BTC", high=98.8, low=98.2, ts=1)  # TP1
         self.assertEqual(risk.fills[0].reason, "TP1")
         self.assertGreater(risk.fills[0].pnl, 0)
-        self.assertAlmostEqual(risk.positions["BTC"].sl, 100.0)
+        # entry 100, risk_distance 3 -> post-TP1 stop = 100 - 0.1*3 = 99.7
+        self.assertAlmostEqual(risk.positions["BTC"].sl, 99.7)
 
         risk.check_exit("BTC", high=97.0, low=96.3, ts=2)  # TP2
         self.assertEqual(risk.fills[1].reason, "TP2")

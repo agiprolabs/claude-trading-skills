@@ -19,11 +19,12 @@ exit:
                             TP2 at 1.2R  -- closes the remaining 50%
 
 One design choice beyond the literal spec: once TP1 fills, the stop for the
-remaining 50% moves to breakeven (entry price). This isn't asked for
-explicitly, but it's the standard, near-universal convention for exactly
-this split-TP shape (bank the first target, then risk nothing further on
-the runner) -- documented here rather than buried, and easy to change (see
-`move_to_breakeven` parameter) if a fixed original stop is wanted instead.
+remaining 50% moves to breakeven **plus a small buffer** (entry + 0.1R for
+a LONG, entry - 0.1R for a SHORT), not exactly breakeven -- confirmed with
+the user (see `breakeven_offset_r`). This locks in a small guaranteed gain
+on the runner rather than a guaranteed flat/zero, and is easy to change
+(`move_to_breakeven=False` for a fixed original stop, or a different
+`breakeven_offset_r`) if wanted.
 
 Usage:
     python layer4_risk.py --demo
@@ -55,6 +56,7 @@ ATR_STOP_MULT = 1.5   # 1R = ATR14 * 1.5
 TP1_R = 0.5            # first target, 50% of size
 TP2_R = 1.2            # second target, remaining 50%
 TP1_FRACTION = 0.5
+BREAKEVEN_OFFSET_R = 0.1  # post-TP1 stop = entry +/- this many R (confirmed: BE+0.1R, not exact BE)
 
 MARGIN_FRACTION = 0.05
 MAX_POSITIONS = 2
@@ -77,6 +79,7 @@ class Position:
     sl: float
     tp1: float
     tp2: float
+    risk_distance: float     # 1R in price terms, at entry -- needed to compute the BE+offset stop later
     margin: float            # original margin; remaining_margin shrinks after TP1
     remaining_margin: float
     tp1_hit: bool = False
@@ -90,7 +93,7 @@ class Fill:
     exit_price: float
     entry_ts: int
     exit_ts: int
-    reason: str              # "SL", "TP1", "TP2", "BREAKEVEN_STOP"
+    reason: str              # "SL", "TP1", "TP2", "BE_STOP"
     portion_margin: float     # dollar margin closed in this fill
     pnl: float
     pnl_pct: float            # price % move on this leg
@@ -104,11 +107,13 @@ class Layer4RiskManager:
     """
 
     def __init__(self, balance: float = 10_000.0, margin_fraction: float = MARGIN_FRACTION,
-                 max_positions: int = MAX_POSITIONS, move_to_breakeven: bool = True):
+                 max_positions: int = MAX_POSITIONS, move_to_breakeven: bool = True,
+                 breakeven_offset_r: float = BREAKEVEN_OFFSET_R):
         self.balance = balance
         self.margin_fraction = margin_fraction
         self.max_positions = max_positions
         self.move_to_breakeven = move_to_breakeven
+        self.breakeven_offset_r = breakeven_offset_r
         self.positions: dict[str, Position] = {}
         self.fills: list[Fill] = []
 
@@ -132,7 +137,8 @@ class Layer4RiskManager:
         margin = self.balance * self.margin_fraction
         pos = Position(
             symbol=symbol, direction=direction, entry_price=entry_price, entry_ts=entry_ts,
-            sl=sl, tp1=tp1, tp2=tp2, margin=margin, remaining_margin=margin,
+            sl=sl, tp1=tp1, tp2=tp2, risk_distance=risk_distance,
+            margin=margin, remaining_margin=margin,
         )
         self.positions[symbol] = pos
         return pos
@@ -157,8 +163,8 @@ class Layer4RiskManager:
         have been touched within one bar, the stop is assumed to have hit
         first (matches the precedent in tf30m-hma-ema-momentum's engine).
         A position is only ever checked against ONE tier per bar -- TP1 and
-        TP2/breakeven are never both evaluated in the same call, since in
-        reality the stop only moves to breakeven *after* TP1 actually fills.
+        TP2/BE-stop are never both evaluated in the same call, since in
+        reality the stop only moves up *after* TP1 actually fills.
         """
         pos = self.positions.get(symbol)
         if pos is None:
@@ -175,7 +181,7 @@ class Layer4RiskManager:
                     pos.remaining_margin = pos.margin * (1 - TP1_FRACTION)
                     pos.tp1_hit = True
                     if self.move_to_breakeven:
-                        pos.sl = pos.entry_price
+                        pos.sl = pos.entry_price + self.breakeven_offset_r * pos.risk_distance
             else:
                 if high >= pos.sl:
                     self._record_fill(pos, pos.sl, ts, "SL", pos.remaining_margin)
@@ -186,20 +192,21 @@ class Layer4RiskManager:
                     pos.remaining_margin = pos.margin * (1 - TP1_FRACTION)
                     pos.tp1_hit = True
                     if self.move_to_breakeven:
-                        pos.sl = pos.entry_price
+                        pos.sl = pos.entry_price - self.breakeven_offset_r * pos.risk_distance
         else:
+            # tp1_hit is already True here, so any stop hit in this branch is
+            # necessarily the post-TP1 protective stop (BE + offset), never
+            # the original stop -- that can only fire in the branch above.
             if pos.direction == "LONG":
                 if low <= pos.sl:
-                    reason = "BREAKEVEN_STOP" if pos.sl == pos.entry_price else "SL"
-                    self._record_fill(pos, pos.sl, ts, reason, pos.remaining_margin)
+                    self._record_fill(pos, pos.sl, ts, "BE_STOP", pos.remaining_margin)
                     del self.positions[symbol]
                 elif high >= pos.tp2:
                     self._record_fill(pos, pos.tp2, ts, "TP2", pos.remaining_margin)
                     del self.positions[symbol]
             else:
                 if high >= pos.sl:
-                    reason = "BREAKEVEN_STOP" if pos.sl == pos.entry_price else "SL"
-                    self._record_fill(pos, pos.sl, ts, reason, pos.remaining_margin)
+                    self._record_fill(pos, pos.sl, ts, "BE_STOP", pos.remaining_margin)
                     del self.positions[symbol]
                 elif low <= pos.tp2:
                     self._record_fill(pos, pos.tp2, ts, "TP2", pos.remaining_margin)
@@ -273,7 +280,7 @@ def summarize(risk: Layer4RiskManager, starting_balance: float) -> dict:
         "losses": len(losses),
         "win_rate": (len(wins) / len(fills)) if fills else 0.0,
         "profit_factor": (gross_win / gross_loss) if gross_loss > 0 else float("inf"),
-        "by_reason": {r: sum(1 for f in fills if f.reason == r) for r in ("SL", "TP1", "TP2", "BREAKEVEN_STOP")},
+        "by_reason": {r: sum(1 for f in fills if f.reason == r) for r in ("SL", "TP1", "TP2", "BE_STOP")},
         "by_symbol": by_symbol,
     }
 
