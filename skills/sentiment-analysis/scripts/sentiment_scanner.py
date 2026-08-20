@@ -50,6 +50,8 @@ COINGECKO_IDS: dict[str, str] = {
     "LINK": "chainlink",
     "DOT": "polkadot",
     "ADA": "cardano",
+    "XRP": "ripple",
+    "TRX": "tron",
 }
 
 # Binance futures symbol mapping
@@ -64,6 +66,8 @@ BINANCE_SYMBOLS: dict[str, str] = {
     "LINK": "LINKUSDT",
     "DOT": "DOTUSDT",
     "ADA": "ADAUSDT",
+    "XRP": "XRPUSDT",
+    "TRX": "TRXUSDT",
 }
 
 DEFAULT_WEIGHTS: dict[str, float] = {
