@@ -11,6 +11,8 @@ A comprehensive collection of **68 ready-to-use trading, DeFi, and quantitative 
 
 > 🙌 **Add your skills — pull requests welcome!** This collection grows from the community's real trading and research experience. **Built something useful?** A new exchange or chain, a market type, a data source, a strategy, or a hard-won lesson — **[open a PR](CONTRIBUTING.md)** and share it. The bar is simple: a working `SKILL.md` in the [Agent Skills](https://agentskills.io) format with honest, tested guidance (see **[CONTRIBUTING.md](CONTRIBUTING.md)**). Every contribution helps the whole community trade smarter.
 
+> 🆕 **Latest addition — [`prediction-market-live-ops`](skills/prediction-market-live-ops/SKILL.md):** live-operations doctrine distilled from a real live-money Kalshi campaign — evidence-gated stage progression with pre-declared falsification lines, round-trip smoke tests, truthful cancels, empirical rate-limit probing, drawdown breakers, and why print-replay EV of passive fills is an upper bound, not an estimate. Ships with a companion open-source reference stack: [kalshi-stack](https://github.com/agiprolabs/kalshi-stack).
+
 <p align="center">
   <img src="claude-trading-skills.gif" alt="Claude Trading Skills Demo" width="800"/>
 </p>
@@ -78,7 +80,7 @@ A comprehensive collection of **68 ready-to-use trading, DeFi, and quantitative 
 | 📉 **Data & Visualization** | 3 | Trading charts, OHLCV processing, trade journaling |
 | 🔬 **Market Microstructure** | 2 | DEX orderflow analysis, traditional LOB theory, market making |
 | 🔮 **Quant Finance** | 2 | Options pricing, fixed income |
-| 🗳️ **Prediction Markets** | 5 | Kalshi & Polymarket exchange APIs, weather + crypto/index range markets, and the cross-cutting strategy/sizing/backtesting layer |
+| 🗳️ **Prediction Markets** | 6 | Kalshi & Polymarket exchange APIs, weather + crypto/index range markets, the strategy/sizing/backtesting layer, and live-operations doctrine from a real campaign |
 | 🧾 **Tax, Accounting & Compliance** | 7 | Cost basis, wash sales, tax-loss harvesting, exports, bookkeeping, reporting |
 
 Each skill includes:
@@ -335,12 +337,13 @@ uv --version
 - **options-pricing** — Black-Scholes, Greeks, implied vol surfaces, crypto options
 - **fixed-income** — Bond pricing, yield curves, DeFi lending rate analysis
 
-### 🗳️ Prediction Markets (5 skills)
+### 🗳️ Prediction Markets (6 skills)
 - **kalshi-api** — Kalshi exchange mechanics: host, RSA-PSS auth, dollar-string order schema, YES/NO order-book convention, candlesticks, WebSocket discovery, rate limits, lifecycle gotchas (canonical docs + verify-first)
 - **polymarket-api** — Polymarket exchange mechanics: Gamma/CLOB/Data APIs, EIP-712 auth, ERC-1155 token model, WebSocket, on-chain redemption, UMA disputes, US geo/KYC (canonical docs + verify-first)
 - **kalshi-weather-markets** — Daily temperature high/low brackets & thresholds: forecast→P(YES) Gaussian map, NWS-CLI/LST settlement, station/DST divergence, CLI-space bias correction
 - **kalshi-crypto-index-markets** — Daily/hourly BTC/ETH & S&P/Nasdaq range markets: range-bracket structure, σ-from-volatility modeling, close-offset decision timing, settle-on-venue-result
 - **prediction-market-strategy** — Cross-cutting: the favorite-longshot maker edge, fee-aware sizing & edge gates, backtesting methodology (the phantom-edge hall of fame), and the supporting literature
+- **prediction-market-live-ops** — Live-operations doctrine from a real live-money campaign: evidence-gated backtest→paper→micro-probe→ratchet progression, pre-declared falsification protocols, execution rails (smoke tests, truthful cancels, shard routing, rate-limit probing, breakers), and capacity measurement — with the [kalshi-stack](https://github.com/agiprolabs/kalshi-stack) reference implementation
 
 ### 🧾 Tax, Accounting & Compliance (7 skills)
 - **tax-liability-tracking** — Real-time gain/loss tracking per trade and portfolio-wide
