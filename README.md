@@ -1,11 +1,11 @@
 # Claude Trading Skills
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
-[![Skills](https://img.shields.io/badge/Skills-67-brightgreen.svg)](#whats-included)
+[![Skills](https://img.shields.io/badge/Skills-68-brightgreen.svg)](#whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io)
 [![Works with](https://img.shields.io/badge/Works_with-Claude_Code_|_Cursor_|_Codex_|_Gemini_CLI-blue.svg)](#getting-started)
 
-A comprehensive collection of **67 ready-to-use trading, DeFi, and quantitative finance [Agent Skills](https://agentskills.io)**. Works with Claude Code, Cursor, Codex, Gemini CLI, and [30+ other tools](https://agentskills.io). Transform your AI agent into a trading analyst capable of executing complex multi-step workflows across market data analysis, on-chain research, backtesting, risk management, tax compliance, and more.
+A comprehensive collection of **68 ready-to-use trading, DeFi, and quantitative finance [Agent Skills](https://agentskills.io)**. Works with Claude Code, Cursor, Codex, Gemini CLI, and [30+ other tools](https://agentskills.io). Transform your AI agent into a trading analyst capable of executing complex multi-step workflows across market data analysis, on-chain research, backtesting, risk management, tax compliance, and more.
 
 **Crypto/DeFi-first. Extensible to all of quant finance.**
 
@@ -45,7 +45,7 @@ A comprehensive collection of **67 ready-to-use trading, DeFi, and quantitative 
 - **Multi-step workflows** — Chain data retrieval → analysis → visualization in a single prompt
 
 ### 🎯 Comprehensive Coverage
-- **67 Skills** across 17 categories covering the full trading workflow
+- **68 Skills** across 17 categories covering the full trading workflow
 - **7 Market Data APIs** — Solana-native and cross-chain data sources
 - **6 Solana Infrastructure** tools for real-time streams, shreds, bundles, DEX aggregation, and transaction building
 - **5 On-Chain Analysis** tools for wallet profiling, whale tracking, sybil detection, and liquidity analysis
@@ -109,7 +109,7 @@ The fastest way to install. Requires Claude Code v1.0.33+.
 /plugin install trading-skills@agiprolabs-claude-trading-skills
 ```
 
-**That's it!** All 67 skills are now available. Claude will automatically discover and use them when relevant to your trading tasks. Skills are namespaced as `/trading-skills:skill-name`.
+**That's it!** All 68 skills are now available. Claude will automatically discover and use them when relevant to your trading tasks. Skills are namespaced as `/trading-skills:skill-name`.
 
 **Managing the plugin:**
 

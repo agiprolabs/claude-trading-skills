@@ -1,6 +1,6 @@
 # Trading Skills — Complete Catalog
 
-This document provides detailed descriptions of all 67 trading skills organized by category.
+This document provides detailed descriptions of all 68 trading skills organized by category.
 
 ---
 
@@ -239,6 +239,9 @@ Daily/hourly BTC/ETH (crypto) and S&P-500/Nasdaq-100 (index) RANGE markets (mark
 
 ### prediction-market-strategy
 Cross-cutting strategy/sizing/validation, venue- and market-type-agnostic. The favorite-longshot maker edge (sell the $0.05–0.20 tail; takers lose ~20% pre-fee, makers win), fee-aware net-edge selection + θ gate + fractional Kelly + exposure caps, the full strategy catalog with honest verdicts, the backtesting methodology and phantom-edge hall of fame, why forecast skill ≠ trading edge, and the supporting literature (Whelan, Polymarket-588M, Gupta).
+
+### prediction-market-live-ops
+Live-operations doctrine distilled from a real live-money Kalshi campaign: evidence-gated stage progression (backtest → paper → live micro-probe → house-money ratchet) with pre-declared falsification lines, backtest hygiene rules (print-replay EV as an upper bound for passive fills, causal joins, top-share concentration checks, settlement selection bias), live-execution rails (1-lot round-trip smoke tests, truthful three-state cancels, exchange-shard routing, empirical rate-limit probing, post-only cohorting, halt files and drawdown breakers), and scaling/capacity measurement. Companion reference implementation: [kalshi-stack](https://github.com/agiprolabs/kalshi-stack).
 
 ---
 
