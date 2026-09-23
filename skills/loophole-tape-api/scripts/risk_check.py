@@ -23,6 +23,7 @@ import sys
 from typing import Any, Optional
 
 BASE = "https://api.loopholetape.com"
+USER_AGENT = "loophole-tape-api-skill/1.0 (+https://github.com/agiprolabs/claude-trading-skills)"
 
 DEMO_MINT = "DemoMint1111111111111111111111111111111pump"
 
@@ -130,7 +131,7 @@ def main() -> int:
 
     import httpx
 
-    with httpx.Client(headers={"accept": "application/json"}) as client:
+    with httpx.Client(headers={"accept": "application/json", "user-agent": USER_AGENT}) as client:
         try:
             radar = get_json(client, "/v1/radar")
             candidates = radar["data"].get("top_rug_risk", []) + radar["data"].get("top_graduation", [])
