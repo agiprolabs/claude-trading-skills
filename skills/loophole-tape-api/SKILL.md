@@ -6,7 +6,7 @@ description: >-
   and calibrated probabilities of a rug within 5 minutes and of a true
   graduation. Free radar, coverage, watch, calibration and track-record routes;
   paid checks cost $0.005 per mint or $0.01 for up to five, paid per call with
-  x402 (USDC on Solana or Base). Use before trading a fresh pump.fun token or
+  x402 (USDC on Solana or Base, or USDG on Robinhood Chain). Use before trading a fresh pump.fun token or
   when monitoring a watchlist of new mints.
 license: MIT
 metadata:
@@ -31,7 +31,7 @@ Basic authority and holder flags are available free from other providers (see `s
 uv pip install httpx
 ```
 
-No account and no API key are needed for the free routes. Paid routes need one of: an x402 v2 client with a funded USDC wallet on Solana or Base, a prepaid key (below), or a browser wallet (Phantom or Solflare) opened on the paid URL.
+No account and no API key are needed for the free routes. Paid routes need one of: an x402 v2 client with a funded USDC wallet on Solana or Base (or USDG on Robinhood Chain, eip155:4663), a prepaid key (below), or a browser wallet (Phantom or Solflare) opened on the paid URL.
 
 ## Quick Start (free routes only)
 
@@ -118,7 +118,7 @@ Read the forward record too. `GET /v1/track-record` for 2026-09-13 to 2026-09-22
 
 ## MCP
 
-Streamable HTTP at `https://api.loopholetape.com/mcp` (initialize and `tools/list` answer without auth). 22 tools: 8 free (`catalog`, `health`, `market_regime`, `sample_mint`, `radar`, `check_coverage`, `watchlist_updates`, `rhc_regime`) and 14 paid (including `check_pumpfun_risk` $0.005 and `check_watchlist_risk` $0.01). A paid tool called without payment returns the x402 requirements as its result; the same human-approval rule applies.
+Streamable HTTP at `https://api.loopholetape.com/mcp` (initialize and `tools/list` answer without auth). 23 tools: 8 free (`catalog`, `health`, `market_regime`, `sample_mint`, `radar`, `check_coverage`, `watchlist_updates`, `rhc_regime`) and 15 paid (including `check_pumpfun_risk` $0.005 and `check_watchlist_risk` $0.01). A paid tool called without payment returns the x402 requirements as its result; the same human-approval rule applies.
 
 ## Use Cases
 
