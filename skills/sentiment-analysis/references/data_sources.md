@@ -77,6 +77,19 @@ Complete reference for social, aggregator, and on-chain sentiment data APIs.
 
 ## Aggregator APIs
 
+### Adanos Market Sentiment (optional)
+
+- **Base URL**: `https://api.adanos.org`
+- **Auth**: `X-API-Key` header; obtain a key at <https://adanos.org/>
+- **Stock detail**: `GET /{reddit|x|news|polymarket}/stocks/v1/stock/{ticker}`
+- **Crypto detail**: `GET /reddit/crypto/v1/token/{symbol}`; the other stock
+  sources are not crypto endpoints
+- **Window**: inclusive UTC `from` and `to` dates; do not use deprecated `days`
+- **Output**: source-specific JSON with explicit `found`/`daily_trend` state;
+  retain provenance and do not substitute a neutral score for missing data
+- **Access**: commercial service with a free tier; endpoint permissions and
+  historical retention vary by plan. See <https://api.adanos.org/docs>.
+
 ### Alternative.me Fear & Greed Index
 
 - **Endpoint**: `GET https://api.alternative.me/fng/`

@@ -34,6 +34,24 @@ data to identify crowd positioning and potential contrarian opportunities.
 See `references/data_sources.md` for complete API details, rate limits, and access
 patterns for each source.
 
+### Optional Structured Sentiment: Adanos
+
+Adanos provides source-labeled US stock sentiment from Reddit, X/FinTwit, News,
+and Polymarket, plus Reddit crypto sentiment. Set `ADANOS_API_KEY` to use the
+optional script (Adanos offers a free tier; source access and historical windows
+depend on the account plan):
+
+```bash
+uv pip install httpx
+python skills/sentiment-analysis/scripts/adanos_sentiment.py AAPL --source news
+python skills/sentiment-analysis/scripts/adanos_sentiment.py BTC --asset-class crypto --source reddit
+```
+
+The script returns the original JSON, including `found: false` where the API
+reports no data. It does not feed Adanos scores into the crypto composite above:
+source metrics and score scales are not interchangeable. Use dated observations
+as supplementary evidence, not as standalone entry or exit signals.
+
 ### Sentiment Metrics
 
 **Mention Velocity** — Rate of token mentions over time:
