@@ -1,6 +1,6 @@
 # Trading Skills — Complete Catalog
 
-This document provides detailed descriptions of all 68 trading skills organized by category.
+This document provides detailed descriptions of all 69 trading skills organized by category.
 
 ---
 
@@ -90,6 +90,9 @@ Vectorized backtesting for high-performance strategy testing. Parameter optimiza
 
 ### backtrader
 Event-driven backtesting with bar-by-bar execution. Complex order types (bracket, stop-limit), multiple analyzers, custom indicators, multi-data feeds. Best for strategies with complex order logic.
+
+### manifoldbt
+Rust-powered backtesting driven by an expression DSL. Strategies are `when()`/`hold()` rules returning a fraction of equity; stop-loss and take-profit brackets with stated fill semantics, per-fill maker/taker fees, `param()` sweeps, higher-timeframe filters and cross-asset references. Source-available (Apache 2.0 with Commons Clause).
 
 ### strategy-framework
 Standardized template for defining strategies: entry rules, exit rules, position sizing, risk parameters, performance criteria. Use before implementing in vectorbt/backtrader.
