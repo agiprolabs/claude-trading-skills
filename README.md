@@ -358,6 +358,15 @@ uv --version
 
 ---
 
+## FXMacroData macro research
+
+The [FXMacroData skill](skills/fxmacrodata/SKILL.md) adds sourced macro indicator
+history, release calendars and research context. The public USD catalogue,
+history and calendar work without an API key, account or card. Optional
+credentials unlock datasets covered by the user's access.
+
+[FXMacroData documentation](https://fxmacrodata.com/documentation/reference?utm_source=github&utm_medium=referral&utm_campaign=claude-trading-skills&utm_content=readme).
+
 ## 🤝 Contributing
 
 We welcome contributions! There's room for dozens more skills covering additional chains, CEX integrations, and advanced strategies.

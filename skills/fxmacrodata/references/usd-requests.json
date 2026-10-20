@@ -1,0 +1,4 @@
+[
+  {"operation": "data_catalogue", "arguments": {"currency": "usd"}},
+  {"operation": "release_calendar", "arguments": {"currency": "usd"}}
+]
