@@ -1,6 +1,6 @@
 # Trading Skills — Complete Catalog
 
-This document provides detailed descriptions of all 68 trading skills organized by category.
+This document provides detailed descriptions of all 69 trading skills organized by category.
 
 ---
 
@@ -27,6 +27,9 @@ Broad crypto market data covering 13,000+ tokens. Global market stats, historica
 ### defillama-api
 DeFi analytics across all chains. TVL, yields, DEX volumes, fees/revenue, stablecoin data, bridge flows. No auth required. Best for macro DeFi analysis and protocol comparison.
 
+
+### loophole-tape-api
+pump.fun launch risk check from an independent capture of pump.fun program events. Timestamped creator exits, bundle dumps, curve and pool drains, holder concentration and buyer flow, plus calibrated probabilities of a rug within 5 minutes and of a true graduation with public validation tables and a daily forward track record. Free radar, coverage, watch, calibration and track-record routes; paid checks $0.005 per mint or $0.01 for up to five via x402 (USDC on Solana or Base), or a prepaid key.
 ---
 
 ## Solana Infrastructure

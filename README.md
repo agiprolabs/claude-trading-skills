@@ -1,11 +1,11 @@
 # Claude Trading Skills
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
-[![Skills](https://img.shields.io/badge/Skills-68-brightgreen.svg)](#whats-included)
+[![Skills](https://img.shields.io/badge/Skills-69-brightgreen.svg)](#whats-included)
 [![Agent Skills](https://img.shields.io/badge/Standard-Agent_Skills-blueviolet.svg)](https://agentskills.io)
 [![Works with](https://img.shields.io/badge/Works_with-Claude_Code_|_Cursor_|_Codex_|_Gemini_CLI-blue.svg)](#getting-started)
 
-A comprehensive collection of **68 ready-to-use trading, DeFi, and quantitative finance [Agent Skills](https://agentskills.io)**. Works with Claude Code, Cursor, Codex, Gemini CLI, and [30+ other tools](https://agentskills.io). Transform your AI agent into a trading analyst capable of executing complex multi-step workflows across market data analysis, on-chain research, backtesting, risk management, tax compliance, and more.
+A comprehensive collection of **69 ready-to-use trading, DeFi, and quantitative finance [Agent Skills](https://agentskills.io)**. Works with Claude Code, Cursor, Codex, Gemini CLI, and [30+ other tools](https://agentskills.io). Transform your AI agent into a trading analyst capable of executing complex multi-step workflows across market data analysis, on-chain research, backtesting, risk management, tax compliance, and more.
 
 **Crypto/DeFi-first. Extensible to all of quant finance.**
 
@@ -47,8 +47,8 @@ A comprehensive collection of **68 ready-to-use trading, DeFi, and quantitative 
 - **Multi-step workflows** — Chain data retrieval → analysis → visualization in a single prompt
 
 ### 🎯 Comprehensive Coverage
-- **68 Skills** across 17 categories covering the full trading workflow
-- **7 Market Data APIs** — Solana-native and cross-chain data sources
+- **69 Skills** across 17 categories covering the full trading workflow
+- **8 Market Data APIs** — Solana-native and cross-chain data sources
 - **6 Solana Infrastructure** tools for real-time streams, shreds, bundles, DEX aggregation, and transaction building
 - **5 On-Chain Analysis** tools for wallet profiling, whale tracking, sybil detection, and liquidity analysis
 - **Statistical + ML** methods purpose-built for trading
@@ -67,7 +67,7 @@ A comprehensive collection of **68 ready-to-use trading, DeFi, and quantitative 
 
 | Category | Skills | Description |
 |----------|--------|-------------|
-| 📊 **Market Data & APIs** | 7 | Birdeye, DexScreener, SolanaTracker, CoinGecko, Helius, Solana RPC, DeFiLlama |
+| 📊 **Market Data & APIs** | 8 | Birdeye, DexScreener, SolanaTracker, CoinGecko, Helius, Solana RPC, DeFiLlama, loophole tape |
 | 🔌 **Solana Infrastructure** | 6 | PumpFun mechanics, transaction building, Yellowstone gRPC, ShredStream, Jito bundles, Raptor DEX aggregator |
 | 🔗 **On-Chain Analysis** | 5 | Wallet profiling, holder analysis, whale tracking, liquidity, sybil detection |
 | 📈 **Technical Analysis** | 3 | pandas-ta, TA-Lib, crypto-native custom indicators |
@@ -111,7 +111,7 @@ The fastest way to install. Requires Claude Code v1.0.33+.
 /plugin install trading-skills@agiprolabs-claude-trading-skills
 ```
 
-**That's it!** All 68 skills are now available. Claude will automatically discover and use them when relevant to your trading tasks. Skills are namespaced as `/trading-skills:skill-name`.
+**That's it!** All 69 skills are now available. Claude will automatically discover and use them when relevant to your trading tasks. Skills are namespaced as `/trading-skills:skill-name`.
 
 **Managing the plugin:**
 
@@ -256,7 +256,7 @@ uv --version
 
 ## 📚 Available Skills
 
-### 📊 Market Data & APIs (7 skills)
+### 📊 Market Data & APIs (8 skills)
 - **birdeye-api** — Solana token data: prices, OHLCV, volume, metadata, trader activity
 - **dexscreener-api** — Multi-chain DEX pair data, no auth required
 - **solanatracker-api** — Solana token data, graduating tokens, PumpFun integration
@@ -264,6 +264,7 @@ uv --version
 - **helius-api** — Enhanced Solana RPC: parsed transactions, DAS, webhooks
 - **solana-rpc** — Direct Solana blockchain interaction via JSON-RPC
 - **defillama-api** — DeFi analytics: TVL, yields, volumes, fees, bridges
+- **loophole-tape-api** — pump.fun launch risk check: creator exits, bundle dumps, drains, calibrated rug/graduation probabilities (free radar and coverage; x402 pay-per-call)
 
 ### 🔌 Solana Infrastructure (6 skills)
 - **pumpfun-mechanics** — Bonding curve math, graduation, migration, event parsing
