@@ -264,6 +264,7 @@ uv --version
 - **helius-api** — Enhanced Solana RPC: parsed transactions, DAS, webhooks
 - **solana-rpc** — Direct Solana blockchain interaction via JSON-RPC
 - **defillama-api** — DeFi analytics: TVL, yields, volumes, fees, bridges
+- **firecrawl-api**: Optional web data: news search, project pages as Markdown, and SEC EDGAR filings via [Firecrawl Alexandria](https://alexandria.firecrawl.dev/categories/finance?utm_source=claude-trading-skills&utm_medium=integration)
 
 ### 🔌 Solana Infrastructure (6 skills)
 - **pumpfun-mechanics** — Bonding curve math, graduation, migration, event parsing
